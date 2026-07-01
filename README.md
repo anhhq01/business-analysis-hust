@@ -1,2 +1,2 @@
-# business-analysis-hust
-Comprehensive Business Analysis project
+# Introduction
+Comprehensive Business Analysis project, designed with Python + Pandas
