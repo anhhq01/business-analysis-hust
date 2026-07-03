@@ -109,6 +109,28 @@ def _score_frame(df: pd.DataFrame) -> list[ScoreResponse]:
     return responses
 
 
+@app.get("/")
+def root() -> dict:
+    """Landing page - confirms the API is up and lists what you can call.
+
+    Open http://localhost:8000/ in a browser to see this.
+    """
+    return {
+        "service": "E-Commerce Fraud Detection API",
+        "status": "running",
+        "model_loaded": _MODEL is not None,
+        "model_name": _META.get("model_name", "not loaded"),
+        "operating_threshold": _META.get("operating_threshold"),
+        "endpoints": {
+            "GET /": "this page",
+            "GET /health": "liveness check",
+            "POST /score": "score one transaction",
+            "POST /score_batch": "score a list of transactions",
+            "GET /docs": "interactive Swagger UI (try the API in the browser)",
+        },
+    }
+
+
 @app.get("/health")
 def health() -> dict:
     """Liveness probe for the cloud platform."""

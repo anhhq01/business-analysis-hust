@@ -1,0 +1,25 @@
+{
+  "model_name": "random_forest",
+  "operating_threshold": 0.09,
+  "feature_columns": [
+    "log_amount",
+    "amount",
+    "oldbalanceOrg",
+    "newbalanceOrig",
+    "oldbalanceDest",
+    "newbalanceDest",
+    "errorBalanceOrig",
+    "errorBalanceDest",
+    "orig_balance_delta",
+    "dest_balance_delta",
+    "amount_to_oldOrg_ratio",
+    "zero_dest_balance",
+    "hour_of_day",
+    "type_CASH_IN",
+    "type_CASH_OUT",
+    "type_DEBIT",
+    "type_PAYMENT",
+    "type_TRANSFER"
+  ],
+  "false_positive_cost": 5.0
+}
