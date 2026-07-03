@@ -1,3 +1,7 @@
 # Virtual Environment & Secrets
 venv/
 .env
+
+# Trained model artifacts (regenerate with `python train.py`)
+artifacts/
+__pycache__/
