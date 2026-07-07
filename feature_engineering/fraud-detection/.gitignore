@@ -4,3 +4,4 @@ data/processed/*
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+src/_pycache__/**
