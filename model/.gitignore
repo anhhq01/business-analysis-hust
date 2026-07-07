@@ -2,5 +2,14 @@
 venv/
 .env
 
-# Trained model artifacts (regenerate with `python train.py`)
+# Python cache
 __pycache__/
+*.pyc
+
+# Runtime monitoring logs
+artifacts/scoring_log.csv
+artifacts/labeled_scoring_log.csv
+
+# Generated monitoring reports
+reports/*.html
+reports/*.json

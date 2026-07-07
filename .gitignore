@@ -1,3 +1,27 @@
 # Virtual Environment & Secrets
 venv/
 .env
+
+# Local datasets and generated artifacts
+feature_engineering/fraud-detection/data/raw/*.csv
+feature_engineering/fraud-detection/data/processed/*.parquet
+feature_engineering/fraud-detection/data/processed/*.csv
+feature_engineering/fraud-detection/data/interim/*.parquet
+
+# Model runtime logs / generated reports
+model/artifacts/scoring_log.csv
+model/artifacts/labeled_scoring_log.csv
+model/reports/*.html
+model/reports/*.json
+
+# Local datasets and generated artifacts
+feature_engineering/fraud-detection/data/raw/*.csv
+feature_engineering/fraud-detection/data/processed/*.parquet
+feature_engineering/fraud-detection/data/processed/*.csv
+feature_engineering/fraud-detection/data/interim/*.parquet
+
+# Model runtime logs / generated reports
+model/artifacts/scoring_log.csv
+model/artifacts/labeled_scoring_log.csv
+model/reports/*.html
+model/reports/*.json

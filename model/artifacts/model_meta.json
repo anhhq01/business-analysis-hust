@@ -1,6 +1,6 @@
 {
   "model_name": "random_forest",
-  "operating_threshold": 0.09,
+  "operating_threshold": 0.42000000000000004,
   "feature_columns": [
     "log_amount",
     "amount",

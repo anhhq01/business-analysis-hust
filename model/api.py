@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 import joblib
@@ -20,6 +21,7 @@ from pydantic import BaseModel, Field
 from data_prep import build_features
 
 ARTIFACT_DIR = Path(__file__).parent / "artifacts"
+SCORING_LOG_PATH = ARTIFACT_DIR / "scoring_log.csv"
 
 # Lazily populated on startup so import stays cheap.
 _MODEL = None
@@ -86,6 +88,33 @@ class ScoreResponse(BaseModel):
     model_name: str
 
 
+def _append_scoring_log(
+    raw_df: pd.DataFrame,
+    features: pd.DataFrame,
+    responses: list[ScoreResponse],
+) -> None:
+    """Append scored transactions for Module 7 monitoring."""
+    ARTIFACT_DIR.mkdir(exist_ok=True)
+
+    log_df = features.copy()
+    log_df["fraud_probability"] = [r.fraud_probability for r in responses]
+    log_df["prediction"] = [int(r.is_fraud) for r in responses]
+    log_df["decision"] = [r.decision for r in responses]
+    log_df["scored_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Keep raw request fields for debugging and business analysis.
+    for col in raw_df.columns:
+        log_df[f"raw_{col}"] = raw_df[col].values
+
+    write_header = not SCORING_LOG_PATH.exists()
+    log_df.to_csv(
+        SCORING_LOG_PATH,
+        mode="a",
+        header=write_header,
+        index=False,
+    )
+
+
 def _score_frame(df: pd.DataFrame) -> list[ScoreResponse]:
     """Score one or more transactions (shared by /score and /score_batch)."""
     features = build_features(df)
@@ -106,6 +135,9 @@ def _score_frame(df: pd.DataFrame) -> list[ScoreResponse]:
                 model_name=model_name,
             )
         )
+
+    _append_scoring_log(df, features, responses)
+
     return responses
 
 

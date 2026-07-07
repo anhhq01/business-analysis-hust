@@ -196,11 +196,26 @@ def main() -> None:
         )
     results_df.to_csv(ARTIFACT_DIR / "model_comparison.csv", index=False)
 
-    # A reference sample of the training distribution for Module 7 drift
-    # monitoring (kept small so it can live in the repo).
-    X_train.assign(isFraud=y_train.values).sample(
-        n=min(5000, len(X_train)), random_state=42
-    ).to_csv(ARTIFACT_DIR / "training_reference_sample.csv", index=False)
+    # A reference sample of the training distribution for Module 7 monitoring.
+    # It includes features, target, model probability, and binary prediction.
+    reference_sample = X_train.assign(isFraud=y_train.values).sample(
+        n=min(5000, len(X_train)),
+        random_state=42,
+    )
+
+    reference_proba = best_model.predict_proba(
+        reference_sample[FEATURE_COLUMNS]
+    )[:, 1]
+
+    reference_sample["fraud_probability"] = reference_proba
+    reference_sample["prediction"] = (
+        reference_sample["fraud_probability"] >= best_threshold
+    ).astype(int)
+
+    reference_sample.to_csv(
+        ARTIFACT_DIR / "training_reference_sample.csv",
+        index=False,
+    )
 
     print(f"      wrote artifacts to {ARTIFACT_DIR}")
 

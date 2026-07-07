@@ -117,13 +117,31 @@ def load_raw(csv_path: str, max_rows: int | None = None) -> pd.DataFrame:
             df = df.drop(columns=col)
 
     if max_rows is not None and len(df) > max_rows:
-        # Stratified down-sample to keep both fraud and non-fraud, so
-        # training stays fast on modest hardware without losing the
-        # minority class.
-        frac = max_rows / len(df)
+        fraud_df = df[df["isFraud"] == 1]
+        non_fraud_df = df[df["isFraud"] == 0]
+
+        fraud_frac = len(fraud_df) / len(df)
+        target_fraud_n = max(1, int(round(max_rows * fraud_frac)))
+        target_non_fraud_n = max_rows - target_fraud_n
+
+        target_fraud_n = min(target_fraud_n, len(fraud_df))
+        target_non_fraud_n = min(target_non_fraud_n, len(non_fraud_df))
+
+        sampled_fraud = fraud_df.sample(
+            n=target_fraud_n,
+            random_state=42,
+            replace=False,
+        )
+
+        sampled_non_fraud = non_fraud_df.sample(
+            n=target_non_fraud_n,
+            random_state=42,
+            replace=False,
+        )
+
         df = (
-            df.groupby("isFraud", group_keys=False)
-            .apply(lambda g: g.sample(frac=frac, random_state=42))
+            pd.concat([sampled_fraud, sampled_non_fraud], axis=0)
+            .sample(frac=1, random_state=42)
             .reset_index(drop=True)
         )
 
