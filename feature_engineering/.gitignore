@@ -1,4 +1,4 @@
 # Virtual Environment & Secrets
 venv/
 .env
-_pycache__/**
+src/_pycache__/**
