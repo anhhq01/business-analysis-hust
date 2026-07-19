@@ -1,6 +1,6 @@
 # EDA run report - e-commerce fraud detection
 
-Generated: **2026-07-19 14:43:03**
+Generated: **2026-07-19 14:58:45**
 Base file: `/home/raven/Workspaces/ba/business-analysis-hust/feature_engineering/fraud-detection/data/raw/online_fraud_detection.csv`
 Enriched file: `/home/raven/Workspaces/ba/business-analysis-hust/feature_engineering/fraud-detection/data/processed/transactions_enriched.parquet` (present)
 
@@ -43,7 +43,7 @@ Duplicate rows: **0**  |  Total missing cells: **0**
   0.1291% of count -> fraudulent transactions are far larger than
   average, so a missed fraud costs on the order of its `amount`.
 
-![Legit vs fraud counts (log scale).](reports/figures/01_class_imbalance.png)
+![Legit vs fraud counts (log scale).](figures/01_class_imbalance.png)
 
 *Legit vs fraud counts (log scale).*
 
@@ -62,7 +62,7 @@ overall): the modelling universe is far less imbalanced than the headline.
 | DEBIT    |    41,432.0000 |     0.0000 |         0.0000 |
 | PAYMENT  | 2,151,495.0000 |     0.0000 |         0.0000 |
 
-![Fraud rate by type (TRANSFER & CASH_OUT only).](reports/figures/02_fraud_by_type.png)
+![Fraud rate by type (TRANSFER & CASH_OUT only).](figures/02_fraud_by_type.png)
 
 *Fraud rate by type (TRANSFER & CASH_OUT only).*
 
@@ -76,7 +76,7 @@ transactions sit systematically higher, consistent with account-draining.
 | legit |   178,197.0 |  74,684.7 |   364,373.4 |  1,586,064.2 | 92,445,516.6 |
 | fraud | 1,467,967.3 | 441,423.4 | 4,521,723.5 | 10,000,000.0 | 10,000,000.0 |
 
-![Log-amount density, legit vs fraud.](reports/figures/03_amount_log.png)
+![Log-amount density, legit vs fraud.](figures/03_amount_log.png)
 
 *Log-amount density, legit vs fraud.*
 
@@ -117,7 +117,7 @@ strong negative signal.
 real PaySim clock rather than anything injected. Fraud is disproportionately
 concentrated in the low-activity night hours.
 
-![Fraud rate across the 24-hour cycle.](reports/figures/04_fraud_by_hour.png)
+![Fraud rate across the 24-hour cycle.](figures/04_fraud_by_hour.png)
 
 *Fraud rate across the 24-hour cycle.*
 
@@ -132,7 +132,7 @@ be useful and is dropped from modelling, as the data dictionary advises.
 Correlations among the base numeric fields and the label. Balance/amount
 fields carry most of the base signal; nothing else is strongly linear.
 
-![Base numeric correlation matrix.](reports/figures/05_corr_base.png)
+![Base numeric correlation matrix.](figures/05_corr_base.png)
 
 *Base numeric correlation matrix.*
 
@@ -173,15 +173,15 @@ indicate leakage.
 For the continuous signals, fraud rate by decile (monotone-ish increase
 expected, never a clean step to 100%):
 
-![Fraud rate across account_age_days deciles.](reports/figures/06_decile_account_age_days.png)
+![Fraud rate across account_age_days deciles.](figures/06_decile_account_age_days.png)
 
 *Fraud rate across account_age_days deciles.*
 
-![Fraud rate across failed_payment_attempts deciles.](reports/figures/06_decile_failed_payment_attempts.png)
+![Fraud rate across failed_payment_attempts deciles.](figures/06_decile_failed_payment_attempts.png)
 
 *Fraud rate across failed_payment_attempts deciles.*
 
-![Fraud rate across ip_billing_distance_km deciles.](reports/figures/06_decile_ip_billing_distance_km.png)
+![Fraud rate across ip_billing_distance_km deciles.](figures/06_decile_ip_billing_distance_km.png)
 
 *Fraud rate across ip_billing_distance_km deciles.*
 
@@ -191,7 +191,7 @@ Every synthetic feature correlates with the label only **weakly** - none
 approaches 1.0. This is the single-glance anti-leakage check: no field is a
 deterministic (or near-deterministic) function of fraud.
 
-![Weak per-feature correlation with the label.](reports/figures/07_synth_corr.png)
+![Weak per-feature correlation with the label.](figures/07_synth_corr.png)
 
 *Weak per-feature correlation with the label.*
 
@@ -218,7 +218,7 @@ engineering.
 |         2 |    71,109.000 | 3,426.000 |          4.818 |
 |         3 |     1,641.000 |   783.000 |         47.715 |
 
-![Fraud rate rises as flags stack.](reports/figures/08_multivariate_lift.png)
+![Fraud rate rises as flags stack.](figures/08_multivariate_lift.png)
 
 *Fraud rate rises as flags stack.*
 

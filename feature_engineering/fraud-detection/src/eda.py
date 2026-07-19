@@ -34,6 +34,7 @@ Run:
 from __future__ import annotations
 import argparse
 import datetime as _dt
+import os
 import textwrap
 from pathlib import Path
 
@@ -80,10 +81,12 @@ class Report:
         path = self.figdir / f"{name}.png"
         fig.savefig(path)
         plt.close(fig)
-        # relative path so the .md renders on GitHub / locally from repo root
-        rel = path.relative_to(self.outdir.parent) if self.outdir.parent in path.parents \
-            else Path("..") / "figures" / path.name
-        self.parts.append(f"![{caption or name}]({rel.as_posix()})\n")
+        # link must be relative to the .md file's own directory (self.outdir),
+        # so it works whether figures is a sibling of reports (-> ../figures/..)
+        # or nested inside it (-> figures/..).
+        rel = os.path.relpath(path, start=self.outdir)
+        rel = Path(rel).as_posix()
+        self.parts.append(f"![{caption or name}]({rel})\n")
         if caption:
             self.parts.append(f"*{caption}*\n")
 
