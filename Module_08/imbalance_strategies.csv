@@ -1,0 +1,4 @@
+strategy,train_rows,train_fraud,train_fraud_%
+original (weights),2217905,3955,0.178
+undersample,7910,3955,50.0
+SMOTE,4427900,2213950,50.0
