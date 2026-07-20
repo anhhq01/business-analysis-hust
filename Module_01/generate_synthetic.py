@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import sys
 import os
-
+import hashlib
 # Add the parent directory (root) to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from scripts.config import (RAW_DATA_PATH, ENRICHED_DATA_PATH, SEED,
@@ -73,7 +73,8 @@ def add_transaction_context(df: pd.DataFrame, rng: np.random.Generator) -> pd.Da
     device_id = np.where(is_new_device, new_dev_ids, df["home_device_id"].to_numpy())
 
     # Browser fingerprint derived from the device (stable per device, with noise)
-    browser_fingerprint = np.array([f"fp_{abs(hash(d)) % (16**10):010x}" for d in device_id])
+    # browser_fingerprint = np.array([f"fp_{abs(hash(d)) % (16**10):010x}" for d in device_id])
+    browser_fingerprint = np.array([f"fp_{hashlib.md5(d.encode()).hexdigest()[:10]}" for d in device_id])
 
     # Shipping vs billing address mismatch
     shipping_billing_mismatch = biased_bool(0.55, 0.10)
