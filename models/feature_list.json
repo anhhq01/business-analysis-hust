@@ -69,5 +69,9 @@
     "hour_sin",
     "hour_cos",
     "step"
+  ],
+  "audit_columns": [
+    "amount_raw",
+    "step_raw"
   ]
 }
