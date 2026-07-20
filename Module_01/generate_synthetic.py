@@ -24,8 +24,12 @@ Run:  python src/generate_synthetic.py
 from __future__ import annotations
 import numpy as np
 import pandas as pd
+import sys
+import os
 
-from config import (RAW_DATA_PATH, ENRICHED_DATA_PATH, SEED,
+# Add the parent directory (root) to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from scripts.config import (RAW_DATA_PATH, ENRICHED_DATA_PATH, SEED,
                     COUNTRIES, COUNTRY_WEIGHTS)
 
 
