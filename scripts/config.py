@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 DATA_RAW = ROOT / "data" / "raw"
 DATA_PROCESSED = ROOT / "data" / "processed"
-FIGURES = ROOT / "reports" / "figures"
+FIGURES = ROOT / "Module_08" / "figures"
 
 # The original Kaggle PaySim CSV. Point this at your file, e.g. on Windows:
 #   RAW_DATA_PATH = Path(r"D:\study\online_fraud_detection.csv")
