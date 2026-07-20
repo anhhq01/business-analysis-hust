@@ -1,0 +1,4 @@
+model,behavioural,full
+LightGBM,0.0943,0.4467
+LogisticRegression,0.8616,0.9051
+RandomForest,0.866,0.9956
