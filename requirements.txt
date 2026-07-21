@@ -11,3 +11,4 @@ jupyter
 nbformat
 nbclient
 ipykernel
+tabulate
