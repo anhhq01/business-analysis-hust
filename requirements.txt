@@ -13,3 +13,4 @@ nbclient
 ipykernel
 tabulate
 lightgbm
+evidently>=0.7,<0.8
