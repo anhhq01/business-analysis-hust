@@ -12,3 +12,4 @@ nbformat
 nbclient
 ipykernel
 tabulate
+lightgbm
