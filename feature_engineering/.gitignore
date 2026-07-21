@@ -1,6 +1,0 @@
-# Virtual Environment & Secrets
-venv/
-.env
-.venv/
-*.parquet
-*.csv

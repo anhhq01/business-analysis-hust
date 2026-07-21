@@ -1,0 +1,4 @@
+metric,pct_of_rows
+orig not reconciling,80.6
+dest not reconciling,68.6
+dest balances both zero (masked),36.4
