@@ -1,285 +1,264 @@
-# Data Balancing Experiments
+# Data Balancing
 
-This module covers the class-imbalance part of Module 4/5 in the project brief.
-It compares the original imbalanced data against undersampling, SMOTE and
-class-weighted training, then evaluates each method with fraud-appropriate
-metrics.
+Folder này tập trung vào 2 việc:
 
-## What This Module Does
+1. **Train + đánh giá imbalance methods**: chạy các cách `original`,
+   `undersampling`, `smote`, `class_weights` với nhiều model rồi so sánh kết quả.
+2. **Monitor dữ liệu đến**: chọn checkpoint đã train, score transaction mới,
+   đo latency, xem class dự đoán, xem chi tiết từng điểm dữ liệu và kiểm tra drift.
 
-The workflow is intentionally split into large phases:
+`balancing_experiments.py` là nơi train/evaluate. `monitor.py` và
+`monitor_app.py` chỉ dùng để monitor, không train lại model.
 
-1. **Load cleaned data**
-   Reads `transactions_cleaned.parquet` produced by the previous cleaning module.
+## 1. Setup
 
-2. **Engineer balancing/modeling features**
-   Drops raw IDs and leakage-prone rule flags, keeps synthetic risk signals, and
-   derives account-history features from `step`/`nameOrig`.
+Từ repo root:
 
-3. **Analyze and select features**
-   Plots feature distributions, computes numeric correlations, removes highly
-   correlated numeric features, and scores feature-target association.
+```bash
+conda activate BA
+pip install -r data_balancing/requirements.txt
+```
 
-4. **Create a valid holdout split**
-   Uses either a stratified split that preserves the fraud rate, or a time split
-   that evaluates on the latest transaction steps.
+Các lệnh phía dưới mặc định đã activate env `BA`.
 
-5. **Apply balancing only on training data**
-   The test set is never undersampled, oversampled, or SMOTE-generated.
+## 2. Yêu Cầu Input
 
-6. **Train and compare models**
-   Models include Logistic Regression, Random Forest, XGBoost, and sklearn
-   HistGradientBoosting.
-
-7. **Evaluate with imbalance-aware metrics**
-   Main metrics are AUC-PR, precision, recall, F1, and business cost. Accuracy is
-   intentionally not used as a headline metric because fraud is rare.
-
-8. **Explain and monitor**
-   Computes model-level permutation importance and provides a separate drift
-   monitoring script for realtime/batch incoming transactions.
-
-## Input
-
-The script reads:
+File cần có trước khi chạy:
 
 ```text
 feature_engineering/fraud-detection/data/processed/transactions_cleaned.parquet
 ```
 
-Before running this module, make sure the earlier pipeline has produced:
+Kiểm tra nhanh data hiện tại:
+
+```bash
+python data_balancing/data_source_check.py
+```
+
+Kết quả mong muốn:
 
 ```text
-feature_engineering/fraud-detection/data/processed/transactions_enriched.parquet
-feature_engineering/fraud-detection/data/processed/transactions_cleaned.parquet
+Active raw: full_kaggle_candidate
+Cleaned data: full_like
+Cleaned rows: 6,362,620
+Fraud rows: 8,213
+Fraud rate: ~0.1291%
 ```
 
-## Feature Decisions
+Nếu thiếu raw data, tải đúng Kaggle dataset:
 
-Dropped fields:
+```bash
+mkdir -p feature_engineering/fraud-detection/data/raw
+kaggle datasets download -d rupakroy/online-payments-fraud-detection-dataset -p feature_engineering/fraud-detection/data/raw --unzip
+ln -sf PS_20174392719_1491204439457_log.csv feature_engineering/fraud-detection/data/raw/online_fraud_detection.csv
+```
 
-- `nameOrig`, `nameDest`: high-cardinality account IDs, useful for traceability
-  but risky as direct model features.
-- `home_device_id`, `device_id`, `browser_fingerprint`: high-cardinality device
-  identifiers.
-- `isFlaggedFraud`: existing rule flag, not a raw behavior signal.
+Nếu cần build lại cleaned data:
 
-Kept or derived fields:
+```bash
+cd feature_engineering/fraud-detection
+PYTHONPATH=src python src/generate_synthetic.py
+PYTHONPATH=src python src/cleaning.py
+cd ../..
+```
 
-- Base transaction signals: `amount`, balances, transaction `type`, `step`.
-- Synthetic/context signals: account age, new device, shipping/billing mismatch,
-  failed payment attempts, IP country, billing distance.
-- Derived balance signals: balance errors, balance deltas, amount ratios.
-- Derived time/account-history signals:
-  `hour_of_day`, `is_night`, `tx_count_prev_orig`,
-  `time_since_prev_orig`, `amount_mean_prev_orig`,
-  `amount_vs_prev_mean_orig`.
+## 3. Chạy Train Và Đánh Giá
 
-Highly correlated numeric features are removed using a configurable threshold
-(`0.98` by default). When two features are redundant, the script keeps the one
-with stronger absolute correlation to `isFraud`.
+Chạy nhanh để smoke test:
 
-## Balancing Methods
+```bash
+python data_balancing/balancing_experiments.py --max-rows 10000 --fraud-review-size 200
+```
 
-- `original`: no balancing; this is the raw imbalanced baseline.
-- `undersampling`: reduces the normal/majority class in the training set only.
-- `smote`: creates synthetic fraud/minority examples in the training set only.
-- `class_weights`: keeps all rows and changes the training loss/penalty. Logistic
-  Regression and Random Forest use `class_weight`; XGBoost uses
-  `scale_pos_weight`; HistGradientBoosting receives `sample_weight`.
+Chạy full data:
 
-## Splits
+```bash
+python data_balancing/balancing_experiments.py --max-rows 0 --split stratified --run-cv --cv-folds 5
+```
 
-Default:
+Chạy full data theo time split:
+
+```bash
+python data_balancing/balancing_experiments.py --max-rows 0 --split time --run-cv --cv-folds 5
+```
+
+Script sẽ so sánh:
+
+| Method | Ý nghĩa |
+| --- | --- |
+| `original` | Data ban đầu, không balancing. |
+| `undersampling` | Giảm bớt class non-fraud trong train set. |
+| `smote` | Tạo fraud synthetic rows trong train set. |
+| `class_weights` | Giữ nguyên data, tăng penalty cho fraud class. |
+
+Lưu ý: SMOTE chỉ được fit/resample một lần trên train set rồi reuse cho các model
+trong strategy `smote`, không tạo lại data cho từng model.
+
+Models được chạy:
+
+- Logistic Regression
+- Random Forest
+- XGBoost
+- HistGradientBoostingClassifier
+
+Metric chính:
+
+- `auc_pr`
+- `fraud_cases_captured`
+- `fraud_cases_missed`
+- `fraud_case_capture_rate`
+- `fraud_amount_captured`
+- `fraud_amount_missed`
+- `fraud_value_capture_rate`
+- `review_queue_size`
+- `false_alerts`
+- `business_cost`
+- `operating_threshold`
+
+Precision/recall/F1 vẫn được lưu để tham chiếu, nhưng khi test cần ưu tiên câu
+hỏi: model phát hiện được bao nhiêu case fraud và bỏ sót bao nhiêu case fraud.
+Accuracy không dùng làm metric chính vì fraud quá ít.
+
+## 4. Outputs Sau Khi Train
+
+Tất cả output nằm trong:
 
 ```text
---split stratified
+data_balancing/outputs/
 ```
 
-This preserves the original fraud ratio in train and test. It is the safest
-main scorecard because precision, false positives and business cost require both
-normal and fraud transactions.
+File quan trọng:
 
-Production-style option:
+| File | Nội dung |
+| --- | --- |
+| `balancing_model_results.csv` | Bảng so sánh method/model. |
+| `balancing_report.md` | Report tổng hợp. |
+| `fraud_review_results.csv` | Review set tập trung vào fraud rows. |
+| `feature_target_scores.csv` | Mutual information của feature với `isFraud`. |
+| `model_permutation_importance.csv` | Feature importance của best model. |
+| `run_metadata.json` | Cấu hình run và feature columns. |
+| `artifacts/best_balancing_model.joblib` | Best model checkpoint. |
+| `artifacts/model_checkpoints.csv` | Manifest các checkpoint đã train. |
+| `artifacts/checkpoints/*.joblib` | Checkpoint cho từng cặp method/model. |
+
+Đọc nhanh kết quả:
 
 ```text
---split time
+data_balancing/outputs/balancing_report.md
+data_balancing/outputs/balancing_model_results.csv
 ```
 
-This sorts by `step`, trains on older transactions and tests on the latest
-transaction steps.
+## 5. Monitor Dữ Liệu Đến
 
-The script also writes a fraud-focused review scorecard containing all fraud
-rows from the holdout plus sampled normal rows. This is useful for recall/fraud
-capture inspection, but it is not the main production metric.
+Phần monitor có 2 cách dùng trong cùng một luồng:
 
-## Run
+- Chạy `monitor.py` để tạo reference/drift report dạng file.
+- Chạy `monitor_app.py` để xem dashboard realtime, chọn checkpoint và click từng transaction.
 
-From the repository root:
+Build reference distribution:
 
-```powershell
-cd D:\BA\business-analysis-hust
-python data_balancing\balancing_experiments.py
+```bash
+python data_balancing/monitor.py --build-reference --max-reference-rows 100000
 ```
 
-Log to a file while still showing progress:
+Check drift cho current window:
 
-```powershell
-python data_balancing\balancing_experiments.py 2>&1 | Tee-Object -FilePath data_balancing\outputs\sample_run.log
-```
-
-Run all 6.36M rows with the stratified scorecard:
-
-```powershell
-python data_balancing\balancing_experiments.py --max-rows 0 --split stratified 2>&1 | Tee-Object -FilePath data_balancing\outputs\full_run_stratified.log
-```
-
-Run all 6.36M rows with a time-based holdout:
-
-```powershell
-python data_balancing\balancing_experiments.py --max-rows 0 --split time 2>&1 | Tee-Object -FilePath data_balancing\outputs\full_run_time.log
-```
-
-Optional 3-fold AUC-PR validation curves:
-
-```powershell
-python data_balancing\balancing_experiments.py --run-cv
-```
-
-## Outputs
-
-Outputs are written to `data_balancing/outputs/`.
-
-Tables:
-
-- `balancing_model_results.csv`: main holdout scorecard.
-- `fraud_review_results.csv`: fraud-focused review scorecard.
-- `feature_correlation_matrix.csv`: numeric correlation matrix.
-- `correlated_features_dropped.csv`: redundant features removed.
-- `feature_target_scores.csv`: feature-target mutual information scores.
-- `model_permutation_importance.csv`: best-model permutation importance.
-- `cv_aucpr_by_fold.csv`: created only with `--run-cv`.
-- `run_metadata.json`: run settings and selected feature list.
-- `balancing_report.md`: human-readable summary.
-
-Figures:
-
-- `figures/class_distribution.png`
-- `figures/feature_distributions_by_class.png`
-- `figures/numeric_feature_correlation.png`
-- `figures/feature_target_scores.png`
-- `figures/model_permutation_importance.png`
-- `figures/metric_comparison.png`
-- `figures/precision_recall_curves.png`
-- `figures/confusion_matrix_best.png`
-- `figures/cv_aucpr_by_fold.png` when `--run-cv` is enabled
-
-Artifacts:
-
-- `artifacts/best_balancing_model.joblib`
-
-## Feature Importance
-
-The training script writes two kinds of importance:
-
-- `feature_target_scores.csv`: model-free mutual information between features
-  and `isFraud`.
-- `model_permutation_importance.csv`: model-level permutation importance for
-  the selected best model, measured by AUC-PR drop on the holdout set.
-
-Use both together:
-
-- Mutual information helps decide whether a feature has standalone signal.
-- Permutation importance shows whether the trained model actually depends on
-  that feature after preprocessing, balancing and interaction with other fields.
-
-## Monitoring and Data Drift
-
-`monitor.py` is separate from training because monitoring should run after
-deployment on incoming transaction windows.
-
-Build or refresh a reference distribution:
-
-```powershell
-python data_balancing\monitor.py --build-reference --current feature_engineering\fraud-detection\data\processed\transactions_cleaned.parquet
-```
-
-Quick monitoring test on a small early sample:
-
-```powershell
-python data_balancing\monitor.py --build-reference --source-max-rows 5000 --max-reference-rows 5000
-python data_balancing\monitor.py --source-max-rows 5000 --max-current-rows 5000
-```
-
-Compare a current/incoming window against the reference:
-
-```powershell
-python data_balancing\monitor.py --current feature_engineering\fraud-detection\data\processed\transactions_cleaned.parquet 2>&1 | Tee-Object -FilePath data_balancing\outputs\monitoring_run.log
+```bash
+python data_balancing/monitor.py --max-current-rows 50000
 ```
 
 Monitoring outputs:
 
-- `monitoring_reference.parquet`: saved baseline distribution.
-- `monitoring_drift_report.csv`: feature-level PSI, KS and categorical drift.
-- `monitoring_summary.md`: human-readable drift summary and realtime monitoring recommendations.
-- `figures/monitoring_drift_summary.png`: top drift signals.
+| File | Nội dung |
+| --- | --- |
+| `monitoring_reference.parquet` | Reference distribution. |
+| `monitoring_drift_report.csv` | Drift report theo feature. |
+| `monitoring_summary.md` | Tóm tắt drift. |
+| `figures/monitoring_drift_summary.png` | Hình top drift signals. |
 
-Recommended realtime monitoring:
+Drift metric:
 
-- Score distribution drift: rolling score percentiles, PSI and review queue size.
-- Feature drift: amount ratios, balance errors, failed attempts, new device,
-  IP distance, country mismatch and transaction type.
-- Operational drift: approval/block/review volume by hour and transaction type.
-- Delayed label metrics: precision, recall, fraud value captured and false
-  positive rate once chargeback/fraud labels arrive.
+- Numeric feature: PSI và KS statistic.
+- Categorical feature: distribution shift.
+- `warning`: bắt đầu drift.
+- `alert`: drift mạnh, cần kiểm tra.
 
-Future work for online transaction data:
+Mở dashboard:
 
-- Start with simple synthetic/balancing methods such as undersampling, SMOTE and
-  KNN-style nearest-neighbor synthesis.
-- Then test stronger generative methods when feasible, such as CTGAN/TVAE for
-  tabular synthetic fraud patterns.
-- Add graph features because fraud often links accounts, devices, IPs and
-  destination accounts: shared-device count, shared-IP count, shared-destination
-  count, connected component risk and account-device-IP bipartite graph scores.
-
-## Streamlit Dashboard
-
-`monitor_app.py` provides a visual dashboard over the generated outputs.
-
-Install the local requirements if needed:
-
-```powershell
-pip install -r data_balancing\requirements.txt
+```bash
+streamlit run data_balancing/monitor_app.py
 ```
 
-Run the dashboard:
+Lưu ý Linux dùng `/`, không dùng `\`.
 
-```powershell
-streamlit run data_balancing\monitor_app.py
+Các tab chính:
+
+- `Home`: chọn scenario, bấm `Start`, stream tự chạy liên tục; click/chọn từng `tx_id` để xem detail.
+- `Feature Drift`: xem kết luận tổng quan, bảng feature cần chú ý trước, rồi mở từng feature để xem reference/current khác nhau ở đâu.
+- `Models`: so sánh kết quả train/evaluate.
+- `Importance`: feature importance.
+- `Config`: data source check, checkpoint, threshold, drift config.
+- `Guide`: hướng dẫn và giải thích các realtime synthesis modes.
+
+Realtime synthesis modes:
+
+| Mode | Ý nghĩa |
+| --- | --- |
+| `Normal traffic` | Lấy mẫu từ reference, không inject bất thường. |
+| `Account takeover` | New device, mismatch, failed attempts, IP distance tăng. |
+| `High-value cashout` | Amount tăng, type chuyển về `CASH_OUT`. |
+| `Bot burst` | Time gap thấp, transaction count và failed attempts tăng. |
+| `Foreign IP wave` | IP mismatch và billing distance tăng. |
+| `Mixed attack` | Trộn nhiều pattern. |
+
+Trong tab `Home`, các control quan trọng:
+
+- `Scenario preset`: cấu hình nhanh cho người mới, ví dụ demo dễ quan sát hoặc traffic bình thường.
+- `Transactions per tick`: số transaction mới được thêm mỗi giây.
+- `Transactions/min`: nhịp timestamp mô phỏng của transaction.
+- `Target fraud rate`: tỉ lệ fraud thật mong muốn trong stream realtime.
+- `Attack share`: tỉ lệ transaction được inject pattern bất thường để test drift/scoring.
+- `Visible buffer`: số điểm gần nhất giữ lại trên chart/table để không bị quá dày.
+- `Start`: bắt đầu tự sinh dữ liệu liên tục.
+- `Pause`: dừng stream nhưng vẫn giữ dữ liệu hiện tại để xem chi tiết.
+- `Reset`: xóa buffer hiện tại và reset lại stream.
+
+Trong khu vực transaction realtime:
+
+- `Khung thời gian`: xem `5 phút`, `30 phút`, `1 giờ`, `1 ngày`, `1 tuần`,
+  `1 tháng`, `1 năm` hoặc `Từ lúc bắt đầu`.
+- Có thể filter theo mã transaction, account/name, IP, type, class dự đoán,
+  fraud thật và ngày đến.
+- Click trực tiếp vào điểm trên chart hoặc click row trong bảng để chọn
+  transaction; phần detail bên dưới sẽ đổi theo transaction đang chọn.
+- Bảng transaction có pagination, tối đa 50 row/page. Mặc định sort `Cũ -> mới`
+  để trang đang xem ít bị nhảy khi stream append dữ liệu mới.
+
+Trong tab `Feature Drift`, đọc theo thứ tự:
+
+1. Xem `Kết luận`, `Lệch mạnh`, `Cần theo dõi`, `Ổn định`.
+2. Xem bảng `Feature cần chú ý trước`; ưu tiên các dòng `Lệch mạnh`.
+3. Mở từng feature để xem thống kê reference/current và biểu đồ phân phối.
+4. Drift không tự kết luận fraud, nhưng báo dữ liệu realtime đã khác data ban đầu.
+5. Biểu đồ top drift dùng `Mức lệch hiển thị` từ 0 đến 1 để dễ nhìn; điểm raw
+   vẫn nằm trong bảng.
+
+Trong tab `Models`:
+
+- Nếu test chỉ có vài fraud case, dashboard sẽ cảnh báo đây là smoke/sample run,
+  không nên kết luận model.
+- `Holdout test` dùng để so sánh model trên dữ liệu chưa train.
+- `K-fold validation` dùng để xem model có ổn định giữa các fold không, không
+  phải test set.
+- Có nút `Retrain` để chạy lại `balancing_experiments.py` nền từ dashboard; nên
+  chọn `Full data`, `stratified`, bật `Run k-fold validation`, và để `CV folds=5`.
+
+## 6. Lệnh Nên Chạy Theo Thứ Tự
+
+```bash
+python data_balancing/data_source_check.py
+python data_balancing/balancing_experiments.py --max-rows 0 --split stratified --run-cv --cv-folds 5
+python data_balancing/monitor.py --build-reference --max-reference-rows 100000
+python data_balancing/monitor.py --max-current-rows 50000
+streamlit run data_balancing/monitor_app.py
 ```
-
-Dashboard tabs:
-
-- **Overview:** best model and current drift status.
-- **Realtime Attack:** simulated incoming transaction batches with attack drift timeline.
-- **Drift:** PSI/KS/category drift table and top drift chart.
-- **Models:** model/balancing comparison and fraud-review scorecard.
-- **Features:** mutual information, permutation importance and dropped correlated features.
-- **Reports:** generated Markdown reports and refresh commands.
-
-Realtime attack scenarios:
-
-- `Account takeover`: new devices, address mismatch, IP mismatch, failed attempts.
-- `High-value cashout`: larger amounts and cash-out-like amount/balance behavior.
-- `Bot burst`: short time gaps, many previous transactions and failed attempts.
-- `Foreign IP wave`: sudden shift toward foreign/high-distance IP transactions.
-
-Realtime monitoring components:
-
-- Threat banner showing current status: `normal`, `warning`, `alert`, or `critical`.
-- Threat gauge for max PSI in the latest incoming batch.
-- Time-based alert timeline with warning/alert thresholds.
-- Feature-by-batch heatmap to see which signal is drifting.
-- Event log ordered by simulated time and threat level.
-- Threat detail selector: choose a feature and inspect reference vs current batch distribution.

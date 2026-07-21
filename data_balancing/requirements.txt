@@ -10,3 +10,5 @@ plotly
 streamlit
 pyarrow
 joblib
+
+streamlit-plotly-events

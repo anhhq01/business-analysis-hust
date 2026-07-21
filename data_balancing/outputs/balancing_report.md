@@ -2,17 +2,17 @@
 
 ## Input
 
-- Data file: `D:\BA\business-analysis-hust\feature_engineering\fraud-detection\data\processed\transactions_cleaned.parquet`
-- Rows used: 50,000
-- Fraud rows: 65
+- Data file: `feature_engineering/fraud-detection/data/processed/transactions_cleaned.parquet`
+- Rows used: 10,000
+- Fraud rows: 13
 - Fraud rate: 0.1300%
 - Split mode: `stratified`
 - Test size: 25%
-- Train fraud rate: 0.1307%
-- Test fraud rate: 0.1280%
+- Train fraud rate: 0.1333%
+- Test fraud rate: 0.1200%
 - Features before correlation filter: 34
-- Features after correlation filter: 33
-- Highly correlated features dropped: 1
+- Features after correlation filter: 32
+- Highly correlated features dropped: 2
 
 ## Feature Decisions
 
@@ -33,34 +33,26 @@
 ## Best Result
 
 - Strategy: `original`
-- Model: `logistic_regression`
-- AUC-PR: 1.0000
-- Precision: 1.0000
-- Recall: 1.0000
-- F1: 1.0000
-- Cost-optimal threshold: 0.30
-- Business cost: 0.00
+- Model: `random_forest`
+- AUC-PR: 0.9387
+- Fraud cases captured: 16/16
+- Fraud cases missed: 0
+- Fraud case capture rate: 1.0000
+- Fraud value captured: 28,091,103.45
+- Fraud value missed: 0.00
+- Fraud value capture rate: 1.0000
+- Review queue size: 92
+- False alerts: 76
+- Cost-optimal threshold: 0.02
+- Business cost: 380.00
 
 ## Full Results
 
-| strategy | model | auc_pr | roc_auc | precision | recall | f1 | operating_threshold | business_cost | fit_seconds |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| original | logistic_regression | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.3000 | 0.0000 | 0.2091 |
-| smote | logistic_regression | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.9300 | 0.0000 | 0.5913 |
-| smote | xgboost | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.0200 | 0.0000 | 1.2882 |
-| class_weights | random_forest | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.1900 | 0.0000 | 0.7767 |
-| class_weights | xgboost | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.9600 | 0.0000 | 0.8751 |
-| original | xgboost | 0.9963 | 1.0000 | 0.9412 | 1.0000 | 0.9697 | 0.0800 | 5.0000 | 5.4328 |
-| smote | random_forest | 0.9963 | 1.0000 | 0.9412 | 1.0000 | 0.9697 | 0.2700 | 5.0000 | 1.1435 |
-| class_weights | logistic_regression | 0.9875 | 1.0000 | 0.7273 | 1.0000 | 0.8421 | 0.9600 | 30.0000 | 0.5367 |
-| undersampling | hist_gradient_boosting | 0.9770 | 1.0000 | 0.6667 | 1.0000 | 0.8000 | 0.9600 | 40.0000 | 0.2396 |
-| undersampling | random_forest | 0.9622 | 0.9999 | 0.4571 | 1.0000 | 0.6275 | 0.5800 | 95.0000 | 0.3052 |
-| smote | hist_gradient_boosting | 0.9575 | 0.9998 | 1.0000 | 0.9375 | 0.9677 | 0.0500 | 44577.3200 | 1.1288 |
-| original | random_forest | 0.9387 | 0.9998 | 0.1739 | 1.0000 | 0.2963 | 0.0200 | 380.0000 | 0.7658 |
-| undersampling | xgboost | 0.9148 | 0.9997 | 0.3200 | 1.0000 | 0.4848 | 0.7600 | 170.0000 | 0.1914 |
-| class_weights | hist_gradient_boosting | 0.8710 | 0.9381 | 0.0013 | 1.0000 | 0.0026 | 0.0400 | 62275.0000 | 3.5471 |
-| undersampling | logistic_regression | 0.8454 | 0.9998 | 0.8000 | 1.0000 | 0.8889 | 0.9600 | 20.0000 | 0.1887 |
-| original | hist_gradient_boosting | 0.2422 | 0.8114 | 0.3333 | 0.6875 | 0.4490 | 0.4800 | 941466.4900 | 1.6837 |
+| strategy | model | auc_pr | test_fraud_cases | fraud_cases_captured | fraud_cases_missed | fraud_case_capture_rate | fraud_amount_captured | fraud_amount_missed | fraud_value_capture_rate | review_queue_size | false_alerts | review_fraud_hit_rate | operating_threshold | business_cost | fit_seconds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| original | random_forest | 0.9387 | 16 | 16 | 0 | 1.0000 | 28091103.4500 | 0.0000 | 1.0000 | 92 | 76 | 0.1739 | 0.0200 | 380.0000 | 1.4778 |
+| original | xgboost | 0.9167 | 3 | 3 | 0 | 1.0000 | 11754212.0700 | 0.0000 | 1.0000 | 4 | 1 | 0.7500 | 0.0200 | 5.0000 | 0.3027 |
+| original | logistic_regression | 0.7381 | 3 | 2 | 1 | 0.6667 | 11576531.5300 | 177680.5400 | 0.9849 | 2 | 0 | 1.0000 | 0.1900 | 177680.5400 | 0.0179 |
 
 ## Fraud-Focused Review Set
 
@@ -68,22 +60,9 @@ This is not the main scorecard. It contains all fraud rows from the holdout plus
 
 | strategy | model | review_rows | review_fraud_rows | review_precision | review_recall | review_f1 | review_fraud_value_capture_rate |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| original | logistic_regression | 1016 | 16 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| original | xgboost | 1016 | 16 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| undersampling | hist_gradient_boosting | 1016 | 16 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| smote | logistic_regression | 1016 | 16 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| smote | xgboost | 1016 | 16 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| class_weights | random_forest | 1016 | 16 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| class_weights | xgboost | 1016 | 16 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| undersampling | logistic_regression | 1016 | 16 | 0.9412 | 1.0000 | 0.9697 | 1.0000 |
-| undersampling | xgboost | 1016 | 16 | 0.9412 | 1.0000 | 0.9697 | 1.0000 |
-| smote | random_forest | 1016 | 16 | 0.9412 | 1.0000 | 0.9697 | 1.0000 |
-| class_weights | logistic_regression | 1016 | 16 | 0.9412 | 1.0000 | 0.9697 | 1.0000 |
-| undersampling | random_forest | 1016 | 16 | 0.8889 | 1.0000 | 0.9412 | 1.0000 |
-| original | random_forest | 1016 | 16 | 0.8000 | 1.0000 | 0.8889 | 1.0000 |
-| class_weights | hist_gradient_boosting | 1016 | 16 | 0.0158 | 1.0000 | 0.0311 | 1.0000 |
-| smote | hist_gradient_boosting | 1016 | 16 | 1.0000 | 0.9375 | 0.9677 | 0.9984 |
-| original | hist_gradient_boosting | 1016 | 16 | 0.7333 | 0.6875 | 0.7097 | 0.9665 |
+| original | xgboost | 103 | 3 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| original | random_forest | 3016 | 16 | 0.4571 | 1.0000 | 0.6275 | 1.0000 |
+| original | logistic_regression | 103 | 3 | 1.0000 | 0.6667 | 0.8000 | 0.9849 |
 
 ## Figures
 

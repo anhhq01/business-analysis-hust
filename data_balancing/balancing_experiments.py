@@ -14,6 +14,7 @@ Use the full dataset:
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import os
 import time
@@ -64,10 +65,12 @@ DEFAULT_CLEANED_DATA = (
 OUTPUT_DIR = ROOT / "data_balancing" / "outputs"
 FIGURE_DIR = OUTPUT_DIR / "figures"
 ARTIFACT_DIR = OUTPUT_DIR / "artifacts"
+CHECKPOINT_DIR = ARTIFACT_DIR / "checkpoints"
 
 SEED = 42
 FALSE_POSITIVE_COST = 5.0
-N_JOBS = 1
+N_JOBS = 4
+XGBOOST_DEVICE = "cuda"
 
 TARGET = "isFraud"
 DROP_COLUMNS = [
@@ -89,6 +92,27 @@ ANALYSIS_SAMPLE_ROWS = 50_000
 # ---------------------------------------------------------------------------
 def log(message: str) -> None:
     print(message, flush=True)
+
+
+def display_path(path: Path) -> str:
+    """Return a stable repo-relative path for logs and reports when possible."""
+    try:
+        return str(path.resolve().relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def merge_metric_table(existing_path: Path, new_df: pd.DataFrame, key_cols: list[str]) -> pd.DataFrame:
+    if not existing_path.exists() or existing_path.stat().st_size == 0:
+        return new_df
+    existing = pd.read_csv(existing_path)
+    if existing.empty:
+        return new_df
+    missing = [col for col in key_cols if col not in existing.columns or col not in new_df.columns]
+    if missing:
+        return new_df
+    merged = pd.concat([existing, new_df], ignore_index=True)
+    return merged.drop_duplicates(subset=key_cols, keep="last")
 
 
 def parse_args() -> argparse.Namespace:
@@ -117,9 +141,46 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=4,
+        help="CPU worker count for supported models.",
+    )
+    parser.add_argument(
+        "--xgboost-device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="XGBoost device. auto tries cuda first, then falls back to cpu.",
+    )
+    parser.add_argument(
         "--run-cv",
         action="store_true",
-        help="Also run 3-fold AUC-PR validation curves. Slower.",
+        help="Also run k-fold AUC-PR validation curves. Slower.",
+    )
+    parser.add_argument(
+        "--cv-folds",
+        type=int,
+        default=5,
+        help="Number of stratified validation folds when --run-cv is enabled.",
+    )
+    parser.add_argument(
+        "--strategies",
+        nargs="+",
+        choices=["original", "undersampling", "smote", "class_weights"],
+        default=["original", "undersampling", "smote", "class_weights"],
+        help="Balancing strategies to train in this run.",
+    )
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        choices=["logistic_regression", "random_forest", "xgboost", "hist_gradient_boosting"],
+        default=["logistic_regression", "random_forest", "xgboost", "hist_gradient_boosting"],
+        help="Model names to train in this run.",
+    )
+    parser.add_argument(
+        "--allow-heavy-combos",
+        action="store_true",
+        help="Allow memory-heavy combinations such as full-data SMOTE + RandomForest.",
     )
     return parser.parse_args()
 
@@ -131,10 +192,10 @@ def load_data(path: Path, max_rows: int, seed: int) -> pd.DataFrame:
     """Read cleaned transactions and optionally take a stratified run sample."""
     if not path.exists():
         raise FileNotFoundError(
-            f"Input not found: {path}. Run synthetic generation and cleaning first."
+            f"Input not found: {display_path(path)}. Run synthetic generation and cleaning first."
         )
 
-    log(f"[1/8] Reading data: {path}")
+    log(f"[1/8] Reading data: {display_path(path)}")
     df = pd.read_parquet(path)
     df = df.replace([np.inf, -np.inf], np.nan)
     df = df.dropna(subset=[TARGET]).copy()
@@ -407,10 +468,39 @@ def make_model(
             scale_pos_weight=scale_pos_weight if weighted else 1.0,
             eval_metric="aucpr",
             tree_method="hist",
+            device=XGBOOST_DEVICE,
             n_jobs=N_JOBS,
             random_state=seed,
         )
     raise ValueError(f"Unknown model: {model_name}")
+
+
+def xgboost_fit_with_fallback(model_name: str, model, X_train, y_train, fit_kwargs: dict):
+    if model_name != "xgboost" or XGBOOST_DEVICE != "cuda":
+        model.fit(X_train, y_train, **fit_kwargs)
+        return model
+    try:
+        model.fit(X_train, y_train, **fit_kwargs)
+        return model
+    except Exception as exc:
+        log(f"      XGBoost CUDA failed, falling back to CPU: {exc}")
+        model.set_params(device="cpu")
+        model.fit(X_train, y_train, **fit_kwargs)
+        return model
+
+
+def pipeline_fit_with_fallback(model_name: str, pipe, X_train, y_train, fit_kwargs: dict):
+    if model_name != "xgboost" or XGBOOST_DEVICE != "cuda":
+        pipe.fit(X_train, y_train, **fit_kwargs)
+        return pipe
+    try:
+        pipe.fit(X_train, y_train, **fit_kwargs)
+        return pipe
+    except Exception as exc:
+        log(f"      XGBoost CUDA failed, falling back to CPU: {exc}")
+        pipe.set_params(model__device="cpu")
+        pipe.fit(X_train, y_train, **fit_kwargs)
+        return pipe
 
 
 def make_pipeline(
@@ -477,6 +567,21 @@ def score_model(name, strategy, pipe, X_test, y_test, amounts_test, fit_seconds)
     y_score = pipe.predict_proba(X_test)[:, 1]
     threshold, business_cost = choose_threshold(y_test, y_score, amounts_test)
     y_pred = (y_score >= threshold).astype(int)
+    y_true = np.asarray(y_test)
+    amounts = np.asarray(amounts_test, dtype=float)
+    fraud_mask = y_true == 1
+    normal_mask = y_true == 0
+    predicted_fraud = y_pred == 1
+    captured_fraud = fraud_mask & predicted_fraud
+    missed_fraud = fraud_mask & (~predicted_fraud)
+    false_alerts = normal_mask & predicted_fraud
+    total_fraud_cases = int(fraud_mask.sum())
+    captured_fraud_cases = int(captured_fraud.sum())
+    missed_fraud_cases = int(missed_fraud.sum())
+    review_queue_size = int(predicted_fraud.sum())
+    fraud_amount_total = float(amounts[fraud_mask].sum())
+    fraud_amount_captured = float(amounts[captured_fraud].sum())
+    fraud_amount_missed = float(amounts[missed_fraud].sum())
 
     return {
         "strategy": strategy,
@@ -486,6 +591,23 @@ def score_model(name, strategy, pipe, X_test, y_test, amounts_test, fit_seconds)
         "precision": precision_score(y_test, y_pred, zero_division=0),
         "recall": recall_score(y_test, y_pred, zero_division=0),
         "f1": f1_score(y_test, y_pred, zero_division=0),
+        "test_fraud_cases": total_fraud_cases,
+        "fraud_cases_captured": captured_fraud_cases,
+        "fraud_cases_missed": missed_fraud_cases,
+        "fraud_case_capture_rate": (
+            captured_fraud_cases / total_fraud_cases if total_fraud_cases else 0.0
+        ),
+        "fraud_amount_total": fraud_amount_total,
+        "fraud_amount_captured": fraud_amount_captured,
+        "fraud_amount_missed": fraud_amount_missed,
+        "fraud_value_capture_rate": (
+            fraud_amount_captured / fraud_amount_total if fraud_amount_total else 0.0
+        ),
+        "review_queue_size": review_queue_size,
+        "false_alerts": int(false_alerts.sum()),
+        "review_fraud_hit_rate": (
+            captured_fraud_cases / review_queue_size if review_queue_size else 0.0
+        ),
         "operating_threshold": threshold,
         "business_cost": business_cost,
         "fit_seconds": fit_seconds,
@@ -562,19 +684,24 @@ def plot_feature_distributions(X: pd.DataFrame, y: pd.Series, path: Path) -> Non
     if not cols:
         return
 
-    sample = X[cols].copy()
-    sample[TARGET] = y.values
-    if len(sample) > ANALYSIS_SAMPLE_ROWS:
-        sample = (
-            sample.groupby(TARGET, group_keys=False)
+    if len(X) > ANALYSIS_SAMPLE_ROWS:
+        sample_idx = (
+            pd.DataFrame({TARGET: y})
+            .groupby(TARGET, group_keys=False)
             .apply(
                 lambda g: g.sample(
                     n=min(len(g), max(1, ANALYSIS_SAMPLE_ROWS // 2)),
                     random_state=SEED,
                 )
             )
-            .reset_index(drop=True)
+            .index
         )
+        sample = X.loc[sample_idx, cols].copy()
+        sample[TARGET] = y.loc[sample_idx].values
+    else:
+        sample = X[cols].copy()
+        sample[TARGET] = y.values
+    sample = sample.reset_index(drop=True)
 
     long = sample.melt(id_vars=TARGET, value_vars=cols, var_name="feature")
     g = sns.FacetGrid(
@@ -807,10 +934,11 @@ def plot_cv_scores(results: pd.DataFrame, path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Phase 8 - Optional cross-validation and reporting
 # ---------------------------------------------------------------------------
-def run_quick_cv(X, y, strategies, models, seed) -> pd.DataFrame:
-    """Run optional 3-fold AUC-PR validation for stability checks."""
+def run_quick_cv(X, y, strategies, models, seed, cv_folds: int) -> pd.DataFrame:
+    """Run optional k-fold AUC-PR validation for stability checks."""
     cv_rows = []
-    splitter = StratifiedKFold(n_splits=3, shuffle=True, random_state=seed)
+    cv_folds = max(2, int(cv_folds))
+    splitter = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=seed)
 
     for fold, (train_idx, valid_idx) in enumerate(splitter.split(X, y), start=1):
         X_train, X_valid = X.iloc[train_idx], X.iloc[valid_idx]
@@ -831,7 +959,7 @@ def run_quick_cv(X, y, strategies, models, seed) -> pd.DataFrame:
                 if strategy == "class_weights" and model_name == "hist_gradient_boosting":
                     weights = compute_sample_weight("balanced", y_train)
                     fit_kwargs["model__sample_weight"] = weights
-                pipe.fit(X_train, y_train, **fit_kwargs)
+                pipeline_fit_with_fallback(model_name, pipe, X_train, y_train, fit_kwargs)
                 y_score = pipe.predict_proba(X_valid)[:, 1]
                 cv_rows.append(
                     {
@@ -859,10 +987,16 @@ def write_report(
             "strategy",
             "model",
             "auc_pr",
-            "roc_auc",
-            "precision",
-            "recall",
-            "f1",
+            "test_fraud_cases",
+            "fraud_cases_captured",
+            "fraud_cases_missed",
+            "fraud_case_capture_rate",
+            "fraud_amount_captured",
+            "fraud_amount_missed",
+            "fraud_value_capture_rate",
+            "review_queue_size",
+            "false_alerts",
+            "review_fraud_hit_rate",
             "operating_threshold",
             "business_cost",
             "fit_seconds",
@@ -955,9 +1089,14 @@ def write_report(
         f"- Strategy: `{best['strategy']}`",
         f"- Model: `{best['model']}`",
         f"- AUC-PR: {best['auc_pr']:.4f}",
-        f"- Precision: {best['precision']:.4f}",
-        f"- Recall: {best['recall']:.4f}",
-        f"- F1: {best['f1']:.4f}",
+        f"- Fraud cases captured: {int(best['fraud_cases_captured']):,}/{int(best['test_fraud_cases']):,}",
+        f"- Fraud cases missed: {int(best['fraud_cases_missed']):,}",
+        f"- Fraud case capture rate: {best['fraud_case_capture_rate']:.4f}",
+        f"- Fraud value captured: {best['fraud_amount_captured']:,.2f}",
+        f"- Fraud value missed: {best['fraud_amount_missed']:,.2f}",
+        f"- Fraud value capture rate: {best['fraud_value_capture_rate']:.4f}",
+        f"- Review queue size: {int(best['review_queue_size']):,}",
+        f"- False alerts: {int(best['false_alerts']):,}",
         f"- Cost-optimal threshold: {best['operating_threshold']:.2f}",
         f"- Business cost: {best['business_cost']:,.2f}",
         "",
@@ -978,10 +1117,14 @@ def write_report(
 # ---------------------------------------------------------------------------
 def main() -> None:
     """Run all phases end to end and write tables, figures and artifacts."""
+    global N_JOBS, XGBOOST_DEVICE
     args = parse_args()
+    N_JOBS = max(1, int(args.n_jobs))
+    XGBOOST_DEVICE = "cuda" if args.xgboost_device == "auto" else args.xgboost_device
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 
     df = load_data(args.data, args.max_rows, args.seed)
     X, y, amounts = split_features(df)
@@ -1026,36 +1169,98 @@ def main() -> None:
             f"({int(review_y.sum()):,} fraud + {int((review_y == 0).sum()):,} normal)"
         )
 
-    strategies = ["original", "undersampling", "smote", "class_weights"]
-    models = ["logistic_regression", "random_forest", "xgboost", "hist_gradient_boosting"]
+    strategies = list(args.strategies)
+    models = list(args.models)
 
     results = []
     review_results = []
     curves = []
-    fitted = {}
+    smote_cache = None
 
     log("[6/8] Training balancing/model combinations")
     for strategy in strategies:
         for model_name in models:
             label = f"{strategy}__{model_name}"
-            log(f"      Training {label} ...")
-            preprocessor = make_preprocessor(X_train)
-            pipe = make_pipeline(
-                model_name,
-                strategy,
-                preprocessor,
-                args.seed,
-                scale_pos_weight=scale_pos_weight,
-            )
-            fit_kwargs = {}
-            if strategy == "class_weights" and model_name == "hist_gradient_boosting":
-                fit_kwargs["model__sample_weight"] = compute_sample_weight(
-                    "balanced", y_train
+            if (
+                strategy == "smote"
+                and model_name == "random_forest"
+                and args.max_rows == 0
+                and not args.allow_heavy_combos
+            ):
+                log(
+                    f"      Skipping {label}: full-data SMOTE + RandomForest is memory-heavy. "
+                    "Use --allow-heavy-combos to force it."
                 )
+                continue
+            log(f"      Training {label} ...")
+            fit_kwargs = {}
 
-            started = time.perf_counter()
-            pipe.fit(X_train, y_train, **fit_kwargs)
-            fit_seconds = time.perf_counter() - started
+            if strategy == "smote":
+                if smote_cache is None:
+                    log("      Fitting preprocess + SMOTE once for all SMOTE models ...")
+                    smote_started = time.perf_counter()
+                    smote_preprocessor = make_preprocessor(X_train)
+                    X_train_preprocessed = smote_preprocessor.fit_transform(X_train)
+                    X_train_smote, y_train_smote = SMOTE(
+                        sampling_strategy=0.25,
+                        k_neighbors=5,
+                        random_state=args.seed,
+                    ).fit_resample(X_train_preprocessed, y_train)
+                    smote_seconds = time.perf_counter() - smote_started
+                    log(
+                        f"      SMOTE cache rows={len(y_train_smote):,} "
+                        f"fraud={int(pd.Series(y_train_smote).sum()):,}; "
+                        f"seconds={smote_seconds:.1f}"
+                    )
+                    smote_cache = {
+                        "preprocessor": smote_preprocessor,
+                        "X_train": X_train_smote,
+                        "y_train": y_train_smote,
+                        "seconds": smote_seconds,
+                    }
+
+                model = make_model(
+                    model_name,
+                    weighted=False,
+                    seed=args.seed,
+                    scale_pos_weight=scale_pos_weight,
+                )
+                started = time.perf_counter()
+                xgboost_fit_with_fallback(
+                    model_name,
+                    model,
+                    smote_cache["X_train"],
+                    smote_cache["y_train"],
+                    {},
+                )
+                fit_seconds = time.perf_counter() - started
+                pipe = Pipeline(
+                    [
+                        ("preprocess", smote_cache["preprocessor"]),
+                        ("model", model),
+                    ]
+                )
+                fit_seconds_total = fit_seconds
+            else:
+                preprocessor = make_preprocessor(X_train)
+                pipe = make_pipeline(
+                    model_name,
+                    strategy,
+                    preprocessor,
+                    args.seed,
+                    scale_pos_weight=scale_pos_weight,
+                )
+                if strategy == "class_weights" and model_name == "hist_gradient_boosting":
+                    fit_kwargs["model__sample_weight"] = compute_sample_weight(
+                        "balanced", y_train
+                    )
+
+                started = time.perf_counter()
+                pipeline_fit_with_fallback(model_name, pipe, X_train, y_train, fit_kwargs)
+                fit_seconds = time.perf_counter() - started
+                fit_seconds_total = fit_seconds
+            checkpoint_path = CHECKPOINT_DIR / f"{label}.joblib"
+            joblib.dump(pipe, checkpoint_path)
 
             row = score_model(
                 model_name,
@@ -1064,8 +1269,15 @@ def main() -> None:
                 X_test,
                 y_test,
                 amount_test,
-                fit_seconds,
+                fit_seconds_total,
             )
+            if strategy == "smote":
+                row["smote_shared_seconds"] = float(smote_cache["seconds"])
+                row["model_fit_seconds"] = float(fit_seconds)
+            else:
+                row["smote_shared_seconds"] = 0.0
+                row["model_fit_seconds"] = float(fit_seconds)
+            row["checkpoint_path"] = str(checkpoint_path.relative_to(ROOT))
             results.append(row)
             y_score = pipe.predict_proba(X_test)[:, 1]
             if review_set is not None:
@@ -1084,23 +1296,100 @@ def main() -> None:
                 {
                     "strategy": strategy,
                     "model": model_name,
-                    "y_true": y_test,
+                    "y_true": y_test.copy(),
                     "y_score": y_score,
                     "auc_pr": row["auc_pr"],
                 }
             )
-            fitted[label] = pipe
+            del pipe
+            if strategy == "smote":
+                del model
+            gc.collect()
+        if strategy == "smote" and smote_cache is not None:
+            log("      Releasing SMOTE cache from memory")
+            del smote_cache
+            smote_cache = None
+            gc.collect()
 
     log("[7/8] Writing evaluation tables and figures")
-    results_df = pd.DataFrame(results).sort_values(["auc_pr", "f1"], ascending=False)
+    results_df = pd.DataFrame(results)
+    results_df = merge_metric_table(
+        OUTPUT_DIR / "balancing_model_results.csv",
+        results_df,
+        ["strategy", "model"],
+    ).sort_values(["auc_pr", "f1"], ascending=False)
     results_df.to_csv(OUTPUT_DIR / "balancing_model_results.csv", index=False)
+    checkpoint_manifest = results_df[
+        [
+            "strategy",
+            "model",
+            "auc_pr",
+            "precision",
+            "recall",
+            "f1",
+            "test_fraud_cases",
+            "fraud_cases_captured",
+            "fraud_cases_missed",
+            "fraud_case_capture_rate",
+            "fraud_amount_captured",
+            "fraud_amount_missed",
+            "fraud_value_capture_rate",
+            "review_queue_size",
+            "false_alerts",
+            "business_cost",
+            "operating_threshold",
+            "checkpoint_path",
+        ]
+    ].copy()
+    checkpoint_manifest["label"] = checkpoint_manifest["strategy"] + "__" + checkpoint_manifest["model"]
+    checkpoint_manifest = checkpoint_manifest[
+        [
+            "label",
+            "strategy",
+            "model",
+            "auc_pr",
+            "precision",
+            "recall",
+            "f1",
+            "test_fraud_cases",
+            "fraud_cases_captured",
+            "fraud_cases_missed",
+            "fraud_case_capture_rate",
+            "fraud_amount_captured",
+            "fraud_amount_missed",
+            "fraud_value_capture_rate",
+            "review_queue_size",
+            "false_alerts",
+            "business_cost",
+            "operating_threshold",
+            "checkpoint_path",
+        ]
+    ]
+    checkpoint_manifest.to_csv(ARTIFACT_DIR / "model_checkpoints.csv", index=False)
     review_results_df = pd.DataFrame(review_results)
+    if not review_results_df.empty:
+        review_results_df = merge_metric_table(
+            OUTPUT_DIR / "fraud_review_results.csv",
+            review_results_df,
+            ["strategy", "model"],
+        )
+        review_sort_cols = [
+            col
+            for col in ["review_fraud_hit_rate", "review_precision", "review_recall", "review_f1"]
+            if col in review_results_df.columns
+        ]
+        if review_sort_cols:
+            review_results_df = review_results_df.sort_values(review_sort_cols, ascending=False)
     if not review_results_df.empty:
         review_results_df.to_csv(OUTPUT_DIR / "fraud_review_results.csv", index=False)
     plot_metric_comparison(results_df, FIGURE_DIR / "metric_comparison.png")
     plot_precision_recall_curves(curves, FIGURE_DIR / "precision_recall_curves.png")
 
-    best_row = results_df.iloc[0]
+    current_labels = {f"{row['strategy']}__{row['model']}" for row in results}
+    plot_candidates = results_df[
+        (results_df["strategy"] + "__" + results_df["model"]).isin(current_labels)
+    ]
+    best_row = plot_candidates.iloc[0] if not plot_candidates.empty else pd.DataFrame(results).iloc[0]
     best_label = f"{best_row['strategy']}__{best_row['model']}"
     best_curve = next(
         curve
@@ -1114,23 +1403,29 @@ def main() -> None:
         f"Best Confusion Matrix: {best_label}",
         FIGURE_DIR / "confusion_matrix_best.png",
     )
-    importance_df = compute_permutation_importance(
-        fitted[best_label], X_test, y_test, args.seed
-    )
+    best_model = joblib.load(CHECKPOINT_DIR / f"{best_label}.joblib")
+    importance_df = compute_permutation_importance(best_model, X_test, y_test, args.seed)
     importance_df.to_csv(OUTPUT_DIR / "model_permutation_importance.csv", index=False)
     plot_model_feature_importance(
         importance_df, FIGURE_DIR / "model_permutation_importance.png"
     )
-    joblib.dump(fitted[best_label], ARTIFACT_DIR / "best_balancing_model.joblib")
+    joblib.dump(best_model, ARTIFACT_DIR / "best_balancing_model.joblib")
+    del best_model
+    gc.collect()
 
     if args.run_cv:
-        log("[8/8] Running optional 3-fold CV curves")
-        cv_df = run_quick_cv(X_train, y_train, strategies, models, args.seed)
+        log(f"[8/8] Running optional {args.cv_folds}-fold CV curves")
+        cv_df = run_quick_cv(X_train, y_train, strategies, models, args.seed, args.cv_folds)
+        cv_df = merge_metric_table(
+            OUTPUT_DIR / "cv_aucpr_by_fold.csv",
+            cv_df,
+            ["strategy", "model", "fold"],
+        )
         cv_df.to_csv(OUTPUT_DIR / "cv_aucpr_by_fold.csv", index=False)
         plot_cv_scores(cv_df, FIGURE_DIR / "cv_aucpr_by_fold.png")
 
     metadata = {
-        "data_path": str(args.data),
+        "data_path": display_path(args.data),
         "rows_used": int(len(df)),
         "fraud_rows": int(y.sum()),
         "fraud_rate": float(y.mean()),
@@ -1148,6 +1443,7 @@ def main() -> None:
         "features_after_selection": int(X.shape[1]),
         "correlated_features_dropped": int(len(dropped_corr)),
         "run_cv": bool(args.run_cv),
+        "cv_folds": int(args.cv_folds),
     }
     (OUTPUT_DIR / "run_metadata.json").write_text(
         json.dumps(metadata, indent=2), encoding="utf-8"
@@ -1161,7 +1457,7 @@ def main() -> None:
 
     log("\n=== Results sorted by AUC-PR/F1 ===")
     log(results_df.to_string(index=False))
-    log(f"\nWrote outputs to: {OUTPUT_DIR}")
+    log(f"\nWrote outputs to: {display_path(OUTPUT_DIR)}")
 
 
 if __name__ == "__main__":
