@@ -1,0 +1,4 @@
+label,strategy,model,auc_pr,precision,recall,f1,test_fraud_cases,fraud_cases_captured,fraud_cases_missed,fraud_case_capture_rate,fraud_amount_captured,fraud_amount_missed,fraud_value_capture_rate,review_queue_size,false_alerts,business_cost,operating_threshold,checkpoint_path
+original__random_forest,original,random_forest,0.9386939571150096,0.1739130434782608,1.0,0.2962962962962963,16,16,0,1.0,28091103.45,0.0,1.0,92,76,380.0,0.02,data_balancing/outputs/artifacts/checkpoints/original__random_forest.joblib
+original__xgboost,original,xgboost,0.9166666666666664,0.75,1.0,0.8571428571428571,3,3,0,1.0,11754212.07,0.0,1.0,4,1,5.0,0.02,data_balancing/outputs/artifacts/checkpoints/original__xgboost.joblib
+original__logistic_regression,original,logistic_regression,0.7380952380952381,1.0,0.6666666666666666,0.8,3,2,1,0.6666666666666666,11576531.53,177680.54,0.9848836707265568,2,0,177680.54,0.19,data_balancing/outputs/artifacts/checkpoints/original__logistic_regression.joblib

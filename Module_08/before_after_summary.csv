@@ -1,0 +1,7 @@
+,before,after,changed
+rows,6362620.0,6362620.0,False
+columns,23.0,23.0,False
+missing_cells,0.0,0.0,False
+duplicate_rows,0.0,0.0,False
+fraud_count,8213.0,8213.0,False
+fraud_rate_%,0.1291,0.1291,False

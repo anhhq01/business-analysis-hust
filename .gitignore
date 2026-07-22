@@ -2,7 +2,4 @@
 venv/
 .env
 .venv/
-
-data_balancing/outputs/
-*.pdf
-*.pyc
+__pycache__/
