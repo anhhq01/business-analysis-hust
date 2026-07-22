@@ -3,3 +3,19 @@ venv/
 .env
 .venv/
 __pycache__/
+
+# Large/raw/generated artifacts
+*.pdf
+*.csv
+*.parquet
+*.joblib
+
+# Project data and generated experiment outputs
+data/raw/
+data/processed/
+feature_engineering/
+data_balancing/
+models/
+
+# Git LFS metadata should not be reintroduced unless the team decides to use LFS
+.gitattributes

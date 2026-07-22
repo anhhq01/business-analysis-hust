@@ -1,3 +1,0 @@
-dropped_feature,kept_feature,absolute_correlation,dropped_target_corr,kept_target_corr
-newbalanceOrig,oldbalanceOrg,0.9988027631723787,0.008148161267570887,0.010154421850334324
-time_since_prev_orig,tx_count_prev_orig,0.9991294343132548,0.0006668481095892931,0.0006806839792072837

@@ -1,6 +1,0 @@
-fold,strategy,model,auc_pr
-1,original,random_forest,0.8890222222222222
-2,original,random_forest,0.9503174603174603
-3,original,random_forest,0.9037698412698413
-4,original,random_forest,1.0
-5,original,random_forest,1.0

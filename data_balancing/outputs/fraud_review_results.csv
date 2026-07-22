@@ -1,4 +1,0 @@
-strategy,model,review_rows,review_fraud_rows,review_precision,review_recall,review_f1,review_fraud_value_capture_rate
-original,xgboost,103,3,1.0,1.0,1.0,1.0
-original,logistic_regression,103,3,1.0,0.6666666666666666,0.8,0.9848836707265569
-original,random_forest,3016,16,0.4571428571428571,1.0,0.6274509803921569,1.0
