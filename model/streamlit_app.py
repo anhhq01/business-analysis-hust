@@ -26,7 +26,7 @@ from data_prep import RAW_INPUT_COLUMNS, TYPE_CATEGORIES
 
 # Default points at a locally running API; override with the API_URL env
 # var (e.g. the Render/HF Spaces URL once deployed).
-DEFAULT_API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000")
+DEFAULT_API_URL = os.environ.get("API_URL", "https://business-analysis-hust.onrender.com/")
 
 st.set_page_config(page_title="Fraud Review Queue", page_icon="🛡️", layout="wide")
 
