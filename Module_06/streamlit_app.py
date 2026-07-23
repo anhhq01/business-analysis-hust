@@ -15,14 +15,15 @@ scoring policy:
                      risk signals fire.
 
 Scoring backends (sidebar):
-  * Local model  - imports Module_06/scoring.py directly (default; this is the
-                   mode to use on Streamlit Community Cloud / HF Spaces, where
-                   only one process runs).
-  * Remote API   - POSTs to the FastAPI service (Module_06/api/main.py), e.g.
-                   a Render deployment, demonstrating the decoupled setup.
+  * Remote API   - default: POSTs to the deployed FastAPI service on Render
+                   (https://business-analysis-hust.onrender.com). Free-tier
+                   services sleep when idle - the first call after a while can
+                   take ~1 minute while the service wakes up.
+  * Local model  - imports Module_06/scoring.py directly; keeps the app fully
+                   testable offline (and is the fallback if the API is down).
 
 Run locally (from the repo root):
-  uv run streamlit run Module_06/app/streamlit_app.py
+  uv run streamlit run Module_06/streamlit_app.py
 """
 from __future__ import annotations
 
@@ -51,6 +52,11 @@ from Module_06.scoring import DEFAULT_STEP, FRAUD_TYPES, FraudScorer  # noqa: E4
 # each risky signal fires with a HIGHER probability for fraud rows and a LOW
 # base rate for legit rows - no single signal separates the classes).
 # ---------------------------------------------------------------------------
+# Deployed scoring API (Render free tier - cold starts take ~1 min after idle).
+DEFAULT_API_URL = "https://business-analysis-hust.onrender.com"
+# Free-tier cold start needs a generous timeout on the FIRST request.
+API_TIMEOUT_S = 90
+
 COUNTRIES = ["US", "GB", "DE", "FR", "IN", "BR", "NG", "RU", "CN", "VN"]
 COUNTRY_WEIGHTS = [0.30, 0.15, 0.12, 0.10, 0.10, 0.07, 0.06, 0.04, 0.03, 0.03]
 LEGIT_TYPES = ["TRANSFER", "CASH_OUT", "PAYMENT", "DEBIT", "CASH_IN"]
@@ -71,7 +77,18 @@ def score_remote(api_url: str, txn: dict, block_threshold: float | None) -> dict
     payload = {"transaction": txn,
                "options": {"update_state": True,
                            "block_threshold": block_threshold}}
-    r = requests.post(f"{api_url.rstrip('/')}/score", json=payload, timeout=15)
+    r = requests.post(f"{api_url.rstrip('/')}/score", json=payload,
+                      timeout=API_TIMEOUT_S)
+    r.raise_for_status()
+    return r.json()
+
+
+@st.cache_data(ttl=300, show_spinner="Contacting scoring API (a free-tier "
+                                     "service that was asleep can take ~1 "
+                                     "minute to wake up) ...")
+def fetch_remote_policy(api_url: str) -> dict:
+    """GET /policy - also serves as the wake-up ping for the Render free tier."""
+    r = requests.get(f"{api_url.rstrip('/')}/policy", timeout=API_TIMEOUT_S)
     r.raise_for_status()
     return r.json()
 
@@ -146,8 +163,8 @@ def simulate_batch(n: int, fraud_rate: float, rng: np.random.Generator) -> list[
 # ---------------------------------------------------------------------------
 def init_state():
     ss = st.session_state
-    ss.setdefault("backend", "Local model")
-    ss.setdefault("api_url", "http://127.0.0.1:8000")
+    ss.setdefault("backend", "Remote API")
+    ss.setdefault("api_url", DEFAULT_API_URL)
     ss.setdefault("enable_block", False)
     ss.setdefault("block_threshold", 0.90)
     ss.setdefault("queue", [])       # pending analyst cases (REVIEW/BLOCK)
@@ -169,15 +186,25 @@ init_state()
 with st.sidebar:
     st.header("Scoring backend")
     st.session_state.backend = st.radio(
-        "Backend", ["Local model", "Remote API"],
-        help="Local = in-process model (use on Streamlit Cloud). "
-             "Remote = FastAPI service (e.g. Render).")
+        "Backend", ["Remote API", "Local model"],
+        help="Remote = deployed FastAPI service on Render (default). "
+             "Local = in-process model, for offline testing.")
     if st.session_state.backend == "Remote API":
         st.session_state.api_url = st.text_input("API URL", st.session_state.api_url)
 
     st.header("Decision policy")
+    pol = None
     if st.session_state.backend == "Local model":
         pol = get_local_scorer().policy
+    else:
+        try:
+            pol = fetch_remote_policy(st.session_state.api_url)
+            st.success("API online", icon="🟢")
+        except requests.RequestException as e:
+            st.warning(f"API not reachable — it may still be waking up "
+                       f"(free tier sleeps when idle). Retry in ~1 min or "
+                       f"switch to *Local model*.\n\n`{e}`", icon="🟠")
+    if pol:
         st.caption(f"**{pol['model']}** ({pol['variant']} variant) — review "
                    f"threshold **{pol['threshold']}** from Module 5 cost "
                    "optimisation (persisted, not re-derived).")
@@ -202,6 +229,12 @@ with st.sidebar:
         st.session_state.sim_step = DEFAULT_STEP
         if st.session_state.backend == "Local model":
             get_local_scorer().dest_history.reset()
+        else:
+            try:  # best effort: clear the API-side velocity store too
+                requests.post(f"{st.session_state.api_url.rstrip('/')}/state/reset",
+                              timeout=API_TIMEOUT_S)
+            except requests.RequestException:
+                pass  # API asleep/unreachable - nothing to reset anyway
         st.rerun()
 
 st.title("🚨 Real-Time Fraud Detection — Analyst Review Queue")
