@@ -1,0 +1,20 @@
+# Module 6 deployment requirements (deliberately minimal: no notebooks, no
+# plotting, no imblearn - only what serving needs, for fast cold starts on
+# free-tier hosts).
+#
+# NOTE: best_model.joblib / scaler.joblib were pickled with scikit-learn 1.9.0
+# (unpickling under other versions raises InconsistentVersionWarning and may
+# break). Keep the pin in sync with the environment that re-trains the model.
+scikit-learn==1.9.0
+pandas>=2.0
+numpy>=1.24
+joblib>=1.3
+
+# API
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+
+# Demo app
+streamlit>=1.32
+requests>=2.31
