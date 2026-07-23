@@ -8,6 +8,7 @@ Endpoints
   POST /score         score ONE transaction -> probability + decision + signals
   POST /score/batch   score a list of transactions (demo convenience)
   POST /state/reset   clear the in-memory destination-velocity store (demo)
+    GET  /monitoring/status  event-log location and number of logged score events
 
 Run locally (from the repo root):
   uv run uvicorn Module_06.api.main:app --reload --port 8000
@@ -22,8 +23,11 @@ persisted Module 4/5 artifacts, never re-derived here.
 """
 from __future__ import annotations
 
+import json
 import sys
+import threading
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -39,7 +43,7 @@ for _cand in [_p, *_p.parents]:
             sys.path.insert(0, str(_cand))
         break
 
-from Module_06.scoring import ALL_TYPES, FraudScorer  # noqa: E402
+from Module_06.scoring import ALL_TYPES, ROOT, FraudScorer  # noqa: E402
 
 app = FastAPI(
     title="E-commerce Fraud Scoring API",
@@ -50,6 +54,8 @@ app = FastAPI(
 )
 
 scorer = FraudScorer()  # loads model + scaler + policy once at startup
+MONITORING_EVENTS_PATH = ROOT / "Module_07" / "inputs" / "module6_scored_events.jsonl"
+_MONITORING_LOCK = threading.Lock()
 
 Country = Literal["BR", "CN", "DE", "FR", "GB", "IN", "NG", "RU", "US", "VN"]
 
@@ -88,6 +94,10 @@ class Transaction(BaseModel):
     newbalanceOrig: Optional[float] = Field(default=None, ge=0)
     oldbalanceDest: Optional[float] = Field(default=None, ge=0)
     newbalanceDest: Optional[float] = Field(default=None, ge=0)
+    actual_label: Optional[int] = Field(
+        default=None,
+        description="optional delayed ground-truth label for monitoring (0/1)",
+    )
 
 
 class ScoreOptions(BaseModel):
@@ -120,17 +130,41 @@ class BatchScoreRequest(BaseModel):
     options: ScoreOptions = ScoreOptions()
 
 
+def _append_monitoring_event(transaction_id: str, txn: dict, result: dict) -> None:
+    """Write one scoring event for Module 7 monitoring (best-effort)."""
+    event = {
+        "event_time_utc": datetime.now(timezone.utc).isoformat(),
+        "source": "module6_api",
+        "transaction_id": transaction_id,
+        **txn,
+        "fraud_probability": result.get("fraud_probability"),
+        "decision": result.get("decision"),
+        "threshold": result.get("threshold"),
+        "model": result.get("model"),
+        "latency_ms": result.get("latency_ms"),
+    }
+    MONITORING_EVENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with _MONITORING_LOCK:
+        with MONITORING_EVENTS_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=True) + "\n")
+
+
 def _score_one(txn: Transaction, opts: ScoreOptions) -> ScoreResponse:
+    transaction_id = txn.transaction_id or f"txn_{uuid.uuid4().hex[:12]}"
+    txn_payload = txn.model_dump()
     try:
-        result = scorer.score(txn.model_dump(),
+        result = scorer.score(txn_payload,
                               update_state=opts.update_state,
                               block_threshold=opts.block_threshold)
     except ValueError as e:  # unknown country/type -> client error, not a 500
         raise HTTPException(status_code=422, detail=str(e))
-    return ScoreResponse(
-        transaction_id=txn.transaction_id or f"txn_{uuid.uuid4().hex[:12]}",
-        **result,
-    )
+    response = ScoreResponse(transaction_id=transaction_id, **result)
+    try:
+        _append_monitoring_event(transaction_id, txn_payload, response.model_dump())
+    except Exception:
+        # Monitoring sink must never break the scoring API path.
+        pass
+    return response
 
 
 @app.get("/health")
@@ -166,3 +200,15 @@ def reset_state():
     """Demo helper: clear the in-memory destination-velocity store."""
     scorer.dest_history.reset()
     return {"status": "ok", "velocity_store_size": len(scorer.dest_history)}
+
+
+@app.get("/monitoring/status")
+def monitoring_status():
+    n_events = 0
+    if MONITORING_EVENTS_PATH.exists():
+        with MONITORING_EVENTS_PATH.open("r", encoding="utf-8") as f:
+            n_events = sum(1 for _ in f)
+    return {
+        "events_log": str(MONITORING_EVENTS_PATH),
+        "events_logged": n_events,
+    }

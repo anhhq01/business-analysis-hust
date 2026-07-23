@@ -10,25 +10,26 @@
     "savings_vs_approve_all": 6698060635.0
   },
   "latest_window_metrics": {
-    "window_start_step": 576.0,
-    "window_end_step": 743.0,
-    "n_transactions": 68117.0,
-    "n_fraud": 1854.0,
-    "n_flagged": 68064.0,
-    "precision": 0.02723906911142454,
+    "window_start_step": 634.0,
+    "window_end_step": 801.0,
+    "n_transactions": 2.0,
+    "n_fraud": 1.0,
+    "n_flagged": 2.0,
+    "precision": 0.5,
     "recall": 1.0,
-    "f1": 0.05303355359134987,
-    "average_precision": 0.8917600226523579,
-    "fraud_rate": 0.027217875126620373
+    "f1": 0.6666666666666666,
+    "average_precision": 1.0,
+    "fraud_rate": 0.5
   },
+  "has_labelled_performance": true,
   "triggers": {
     "drift_fraction": {
-      "value": 0.5405405405405406,
+      "value": 0.35135135135135137,
       "threshold": 0.3,
       "breached": true
     },
     "precision_drop": {
-      "value": 0.02723906911142454,
+      "value": 0.5,
       "threshold": 0.00896,
       "breached": false
     },

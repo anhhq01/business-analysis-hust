@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import sys
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from scripts.config import COUNTRIES, ENRICHED_DATA_PATH, FRAUD_TYPES, ROOT
 
 MODELS_DIR = ROOT / "models"
 OUTPUT_DIR = ROOT / "Module_07" / "outputs"
+EVENTS_LOG = ROOT / "Module_07" / "inputs" / "module6_scored_events.jsonl"
 REFERENCE_MAX_STEP = 354
 DEFAULT_ROLLING_WINDOW = 168
 EPS = 1.0
@@ -49,6 +51,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reference-max-step", type=int, default=REFERENCE_MAX_STEP)
     parser.add_argument("--rolling-window", type=int, default=DEFAULT_ROLLING_WINDOW)
     parser.add_argument("--dashboard-max-rows", type=int, default=100000)
+    parser.add_argument("--events-log", type=Path, default=EVENTS_LOG)
     return parser.parse_args()
 
 
@@ -155,6 +158,101 @@ def split_reference_current(df: pd.DataFrame, reference_max_step: int) -> tuple[
     return reference, current
 
 
+def build_monitoring_frame_from_module6_events(
+    events_log_path: Path,
+    model,
+    deployed_features: list[str],
+    threshold: float,
+) -> pd.DataFrame:
+    if not events_log_path.exists():
+        return pd.DataFrame()
+
+    rows = []
+    with events_log_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    if not rows:
+        return pd.DataFrame()
+
+    raw = pd.DataFrame(rows)
+    raw = raw[raw["type"].isin(FRAUD_TYPES)].copy()
+    if raw.empty:
+        return pd.DataFrame()
+
+    raw["step"] = pd.to_numeric(raw.get("step"), errors="coerce").fillna(744).astype(int)
+    raw["hour_of_day"] = pd.to_numeric(raw.get("hour_of_day"), errors="coerce")
+    raw["hour_of_day"] = raw["hour_of_day"].fillna(raw["step"] % 24).astype(int)
+    raw["is_night"] = ((raw["hour_of_day"] >= 0) & (raw["hour_of_day"] <= 5)).astype(int)
+
+    defaults = {
+        "nameDest": "UNKNOWN_DEST",
+        "oldbalanceOrg": 0.0,
+        "newbalanceOrig": 0.0,
+        "oldbalanceDest": 0.0,
+        "newbalanceDest": 0.0,
+    }
+    for col, default in defaults.items():
+        if col not in raw.columns:
+            raw[col] = default
+        raw[col] = raw[col].fillna(default)
+
+    numeric_cols = [
+        "amount",
+        "account_age_days",
+        "failed_payment_attempts",
+        "ip_billing_distance_km",
+        "oldbalanceOrg",
+        "newbalanceOrig",
+        "oldbalanceDest",
+        "newbalanceDest",
+    ]
+    for col in numeric_cols:
+        raw[col] = pd.to_numeric(raw[col], errors="coerce")
+
+    bool_cols = ["is_new_device", "shipping_billing_mismatch"]
+    for col in bool_cols:
+        raw[col] = raw[col].fillna(0).astype(int)
+
+    if "actual_label" in raw.columns:
+        raw["isFraud"] = pd.to_numeric(raw["actual_label"], errors="coerce")
+    else:
+        raw["isFraud"] = np.nan
+
+    feature_df = build_behavioural_features(raw)
+    missing = [feature for feature in deployed_features if feature not in feature_df.columns]
+    if missing:
+        raise ValueError(f"Missing deployed features from module6 events: {missing}")
+
+    X = feature_df[deployed_features].copy()
+    monitor = X.copy()
+
+    raw_selected = raw.loc[feature_df.index].copy()
+    if "fraud_probability" in raw_selected.columns:
+        scores = pd.to_numeric(raw_selected["fraud_probability"], errors="coerce").to_numpy()
+    else:
+        scores = np.full(len(raw_selected), np.nan)
+    missing_score = np.isnan(scores)
+    if missing_score.any():
+        scores[missing_score] = model.predict_proba(X.iloc[missing_score])[:, 1]
+
+    if "decision" in raw_selected.columns:
+        pred = raw_selected["decision"].isin(["REVIEW", "BLOCK"]).astype(int).to_numpy()
+    else:
+        pred = (scores >= threshold).astype(int)
+
+    monitor["target"] = pd.to_numeric(raw_selected["isFraud"], errors="coerce")
+    monitor["prediction"] = pred
+    monitor["prediction_proba"] = scores
+    monitor["amount_raw"] = pd.to_numeric(raw_selected["amount"], errors="coerce").to_numpy()
+    return monitor
+
+
 def is_binary_feature(series_a: pd.Series, series_b: pd.Series) -> bool:
     values = pd.Index(pd.concat([series_a, series_b], ignore_index=True).dropna().unique())
     return len(values) <= 2 and values.isin([0, 1]).all()
@@ -207,11 +305,15 @@ def rolling_classification_metrics(current: pd.DataFrame, window_steps: int) -> 
     from sklearn.metrics import average_precision_score, f1_score, precision_score, recall_score
 
     rows: list[dict[str, float | int]] = []
-    step_values = np.sort(current["step"].unique())
+    scored = current[current["target"].notna()].copy()
+    if scored.empty:
+        return pd.DataFrame()
+    scored["target"] = scored["target"].astype(int)
+    step_values = np.sort(scored["step"].unique())
 
     for end_step in step_values:
         start_step = end_step - window_steps + 1
-        window = current[(current["step"] >= start_step) & (current["step"] <= end_step)]
+        window = scored[(scored["step"] >= start_step) & (scored["step"] <= end_step)]
         y_true = window["target"]
         y_pred = window["prediction"]
         y_score = window["prediction_proba"]
@@ -251,9 +353,15 @@ def build_evidently_dashboard(
     from evidently import BinaryClassification, DataDefinition, Dataset, Report
     from evidently.presets import ClassificationPreset, DataDriftPreset
 
-    ref_sample = reference.sample(min(len(reference), max_rows), random_state=42)
-    cur_sample = current.sample(min(len(current), max_rows), random_state=42)
+    ref_sample = reference.sample(min(len(reference), max_rows), random_state=42).copy()
+    cur_sample = current.sample(min(len(current), max_rows), random_state=42).copy()
     data_columns = features + ["target", "prediction", "prediction_proba"]
+
+    # Normalize types so Evidently/Sklearn never sees mixed binary/continuous labels.
+    for frame in (ref_sample, cur_sample):
+        frame["target"] = pd.to_numeric(frame["target"], errors="coerce")
+        frame["prediction"] = pd.to_numeric(frame["prediction"], errors="coerce")
+        frame["prediction_proba"] = pd.to_numeric(frame["prediction_proba"], errors="coerce")
 
     definition = DataDefinition(
         numerical_columns=features + ["prediction_proba"],
@@ -270,11 +378,61 @@ def build_evidently_dashboard(
     reference_dataset = Dataset.from_pandas(ref_sample[data_columns], data_definition=definition)
     current_dataset = Dataset.from_pandas(cur_sample[data_columns], data_definition=definition)
 
-    report = Report(
-        metrics=[DataDriftPreset(), ClassificationPreset()],
-        metadata={"module": "Module 7", "variant": "behavioural"},
-    )
-    snapshot = report.run(current_data=current_dataset, reference_data=reference_dataset)
+    ref_labeled = ref_sample[
+        ref_sample["target"].isin([0, 1])
+        & ref_sample["prediction"].isin([0, 1])
+        & ref_sample["prediction_proba"].notna()
+    ]
+    cur_labeled = cur_sample[
+        cur_sample["target"].isin([0, 1])
+        & cur_sample["prediction"].isin([0, 1])
+        & cur_sample["prediction_proba"].notna()
+    ]
+
+    has_ref_classes = ref_labeled["target"].nunique() >= 2
+    has_cur_classes = cur_labeled["target"].nunique() >= 2
+    has_enough_labeled_rows = len(ref_labeled) >= 2 and len(cur_labeled) >= 2
+
+    metrics = [DataDriftPreset()]
+    metadata = {"module": "Module 7", "variant": "behavioural"}
+    if has_ref_classes and has_cur_classes and has_enough_labeled_rows:
+        metrics.append(ClassificationPreset())
+        metadata["classification_report"] = "enabled"
+    else:
+        metadata["classification_report"] = (
+            "skipped: insufficient valid labeled rows/classes in current/reference data"
+        )
+
+    report = Report(metrics=metrics, metadata=metadata)
+    try:
+        # Evidently may trigger benign numpy warnings on constant/near-constant
+        # slices; suppress only this known noise pattern to keep logs readable.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="invalid value encountered in divide",
+                category=RuntimeWarning,
+                module=r"numpy\\.lib\\._function_base_impl",
+            )
+            snapshot = report.run(current_data=current_dataset, reference_data=reference_dataset)
+    except ValueError as e:
+        # Some tiny/edge batches can still fail legacy classification metrics.
+        # Retry with drift-only so monitoring never crashes in production.
+        fallback = Report(
+            metrics=[DataDriftPreset()],
+            metadata={
+                **metadata,
+                "classification_report": f"skipped due to Evidently error: {e}",
+            },
+        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="invalid value encountered in divide",
+                category=RuntimeWarning,
+                module=r"numpy\\.lib\\._function_base_impl",
+            )
+            snapshot = fallback.run(current_data=current_dataset, reference_data=reference_dataset)
     snapshot.save_html(str(output_path))
 
 
@@ -289,6 +447,10 @@ def evaluate_triggers(
     baseline_precision = float(baseline_metrics["precision"])
     baseline_recall = float(baseline_metrics["recall"])
 
+    has_perf = not rolling_metrics.empty
+    latest_precision = float(latest.get("precision", float("nan")))
+    latest_recall = float(latest.get("recall", float("nan")))
+
     triggers = {
         "drift_fraction": {
             "value": drift_fraction,
@@ -296,14 +458,18 @@ def evaluate_triggers(
             "breached": drift_fraction > config.drift_feature_fraction,
         },
         "precision_drop": {
-            "value": float(latest.get("precision", float("nan"))),
+            "value": latest_precision,
             "threshold": baseline_precision * config.precision_multiplier,
-            "breached": float(latest.get("precision", 1.0)) < baseline_precision * config.precision_multiplier,
+            "breached": (latest_precision < baseline_precision * config.precision_multiplier)
+            if has_perf
+            else False,
         },
         "recall_drop": {
-            "value": float(latest.get("recall", float("nan"))),
+            "value": latest_recall,
             "threshold": baseline_recall - config.recall_drop,
-            "breached": float(latest.get("recall", 1.0)) < baseline_recall - config.recall_drop,
+            "breached": (latest_recall < baseline_recall - config.recall_drop)
+            if has_perf
+            else False,
         },
         "scheduled_retrain": {
             "policy": "review monthly even without drift, because fraud patterns evolve",
@@ -314,6 +480,7 @@ def evaluate_triggers(
     return {
         "baseline_metrics": baseline_metrics,
         "latest_window_metrics": latest,
+        "has_labelled_performance": has_perf,
         "triggers": triggers,
         "should_retrain": any(item.get("breached", False) for item in triggers.values()),
     }
@@ -381,7 +548,16 @@ def main() -> None:
     threshold = float(policy["threshold"])
 
     monitored = score_monitoring_frame(args.enriched, model, deployed_features, threshold)
-    reference, current = split_reference_current(monitored, args.reference_max_step)
+    reference, historical_current = split_reference_current(monitored, args.reference_max_step)
+
+    current = historical_current
+    current_source = "historical_enriched"
+    events_current = build_monitoring_frame_from_module6_events(
+        args.events_log, model, deployed_features, threshold
+    )
+    if not events_current.empty:
+        current = events_current
+        current_source = "module6_events"
 
     drift_summary = compute_drift_summary(reference, current, deployed_features)
     rolling_metrics = rolling_classification_metrics(current, args.rolling_window)
@@ -421,6 +597,7 @@ def main() -> None:
     print(f"[monitor] drift      -> {args.output_dir / 'drift_summary.csv'}")
     print(f"[monitor] rolling    -> {args.output_dir / 'rolling_metrics.csv'}")
     print(f"[monitor] triggers   -> {args.output_dir / 'trigger_summary.json'}")
+    print(f"[monitor] current source -> {current_source}")
 
 
 if __name__ == "__main__":
