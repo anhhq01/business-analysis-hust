@@ -1,0 +1,47 @@
+{
+  "baseline_metrics": {
+    "AUC_PR": 0.866,
+    "threshold*": 0.004,
+    "precision": 0.0128,
+    "recall": 0.9988,
+    "F1": 0.0252,
+    "net_cost": 4534131.0,
+    "n_fp": 328519.0,
+    "savings_vs_approve_all": 6698060635.0
+  },
+  "latest_window_metrics": {
+    "window_start_step": 634.0,
+    "window_end_step": 801.0,
+    "n_transactions": 2.0,
+    "n_fraud": 1.0,
+    "n_flagged": 2.0,
+    "precision": 0.5,
+    "recall": 1.0,
+    "f1": 0.6666666666666666,
+    "average_precision": 1.0,
+    "fraud_rate": 0.5
+  },
+  "has_labelled_performance": true,
+  "triggers": {
+    "drift_fraction": {
+      "value": 0.35135135135135137,
+      "threshold": 0.3,
+      "breached": true
+    },
+    "precision_drop": {
+      "value": 0.5,
+      "threshold": 0.00896,
+      "breached": false
+    },
+    "recall_drop": {
+      "value": 1.0,
+      "threshold": 0.8488,
+      "breached": false
+    },
+    "scheduled_retrain": {
+      "policy": "review monthly even without drift, because fraud patterns evolve",
+      "breached": false
+    }
+  },
+  "should_retrain": true
+}
