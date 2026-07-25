@@ -1,0 +1,47 @@
+feature,used_for_training,reason
+step,True,behavioural/contextual
+amount,False,removed mechanical PaySim balance/amount signal
+oldbalanceOrg,False,removed mechanical PaySim balance/amount signal
+newbalanceOrig,False,removed mechanical PaySim balance/amount signal
+oldbalanceDest,False,removed mechanical PaySim balance/amount signal
+account_age_days,True,behavioural/contextual
+is_new_device,True,behavioural/contextual
+shipping_billing_mismatch,True,behavioural/contextual
+failed_payment_attempts,True,behavioural/contextual
+ip_billing_distance_km,True,behavioural/contextual
+is_night,True,behavioural/contextual
+log_amount,False,removed mechanical PaySim balance/amount signal
+dest_balance_err,False,removed mechanical PaySim balance/amount signal
+drained_origin,False,removed mechanical PaySim balance/amount signal
+amount_to_oldbalanceOrg,False,removed mechanical PaySim balance/amount signal
+dest_balances_masked,False,removed mechanical PaySim balance/amount signal
+ip_country_mismatch,True,behavioural/contextual
+log_ip_distance,True,behavioural/contextual
+young_account,True,behavioural/contextual
+high_failed_attempts,True,behavioural/contextual
+dest_prior_count,True,behavioural/contextual
+dest_steps_since_last,True,behavioural/contextual
+dest_first_seen,True,behavioural/contextual
+hour_sin,True,behavioural/contextual
+hour_cos,True,behavioural/contextual
+is_transfer,True,behavioural/contextual
+home_BR,True,behavioural/contextual
+home_CN,True,behavioural/contextual
+home_DE,True,behavioural/contextual
+home_FR,True,behavioural/contextual
+home_GB,True,behavioural/contextual
+home_IN,True,behavioural/contextual
+home_NG,True,behavioural/contextual
+home_RU,True,behavioural/contextual
+home_US,True,behavioural/contextual
+home_VN,True,behavioural/contextual
+ip_BR,True,behavioural/contextual
+ip_CN,True,behavioural/contextual
+ip_DE,True,behavioural/contextual
+ip_FR,True,behavioural/contextual
+ip_GB,True,behavioural/contextual
+ip_IN,True,behavioural/contextual
+ip_NG,True,behavioural/contextual
+ip_RU,True,behavioural/contextual
+ip_US,True,behavioural/contextual
+ip_VN,True,behavioural/contextual

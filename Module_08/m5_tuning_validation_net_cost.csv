@@ -1,0 +1,85 @@
+data_balancing,model,config_label,val_net_cost
+class_weighted,LightGBM,"trees=100, lr=0.05, leaves=15, child=200",33510586.68
+class_weighted,LightGBM,"trees=300, lr=0.03, leaves=31, child=200",36295972.3
+class_weighted,LightGBM,"trees=300, lr=0.03, leaves=63, child=300",36441491.65
+class_weighted,LightGBM,"trees=600, lr=0.03, leaves=31, child=200",53029719.96999999
+class_weighted,LightGBM,"trees=600, lr=0.03, leaves=63, child=300",76040286.08999999
+class_weighted,LightGBM,"trees=300, lr=0.05, leaves=15, child=200",83998433.67999999
+class_weighted,LightGBM,"trees=600, lr=0.03, leaves=15, child=300",91569624.32
+class_weighted,LightGBM,"trees=300, lr=0.05, leaves=31, child=100",136597247.22
+class_weighted,LogisticRegression,C=3.0,1057191.81
+class_weighted,LogisticRegression,C=1.0,1058481.81
+class_weighted,LogisticRegression,C=0.3,1067151.81
+class_weighted,LogisticRegression,C=0.1,1088801.81
+class_weighted,LogisticRegression,C=0.03,1107241.81
+class_weighted,RandomForest,"trees=50, depth=8, leaf=100",1188887.08
+class_weighted,RandomForest,"trees=200, depth=16, leaf=20",1352637.08
+class_weighted,RandomForest,"trees=100, depth=12, leaf=50",1507371.33
+class_weighted,RandomForest,"trees=300, depth=16, leaf=50",1623781.33
+class_weighted,RandomForest,"trees=200, depth=20, leaf=20",1849247.08
+class_weighted,RandomForest,"trees=200, depth=12, leaf=100",2924557.35
+class_weighted,RandomForest,"trees=100, depth=16, leaf=100",3082755.06
+class_weighted,RandomForest,"trees=200, depth=16, leaf=50",3422024.43
+original,LightGBM,"trees=100, lr=0.05, leaves=15, child=200",9919115.64
+original,LightGBM,"trees=300, lr=0.03, leaves=31, child=200",11404140.5
+original,LightGBM,"trees=600, lr=0.03, leaves=63, child=300",11454502.79
+original,LightGBM,"trees=300, lr=0.03, leaves=63, child=300",11488112.79
+original,LightGBM,"trees=300, lr=0.05, leaves=31, child=100",19439719.64
+original,LightGBM,"trees=300, lr=0.05, leaves=15, child=200",25459882.570000004
+original,LightGBM,"trees=600, lr=0.03, leaves=31, child=200",26327015.790000003
+original,LightGBM,"trees=600, lr=0.03, leaves=15, child=300",26869057.290000003
+original,LogisticRegression,C=0.03,2350699.1
+original,LogisticRegression,C=0.1,8846572.64
+original,LogisticRegression,C=0.3,9540893.83
+original,LogisticRegression,C=1.0,17094712.42
+original,LogisticRegression,C=3.0,26675079.020000003
+original,RandomForest,"trees=300, depth=16, leaf=50",2979884.53
+original,RandomForest,"trees=50, depth=8, leaf=100",3069914.53
+original,RandomForest,"trees=100, depth=12, leaf=50",9576702.93
+original,RandomForest,"trees=200, depth=16, leaf=20",10144668.59
+original,RandomForest,"trees=200, depth=20, leaf=20",11198182.79
+original,RandomForest,"trees=100, depth=16, leaf=100",11476488.149999999
+original,RandomForest,"trees=200, depth=12, leaf=100",11725869.309999999
+original,RandomForest,"trees=200, depth=16, leaf=50",11990825.350000001
+smote,LightGBM,"trees=100, lr=0.05, leaves=15, child=200",1190741.81
+smote,LightGBM,"trees=300, lr=0.03, leaves=31, child=200",2839809.57
+smote,LightGBM,"trees=300, lr=0.03, leaves=63, child=300",3071867.28
+smote,LightGBM,"trees=300, lr=0.05, leaves=15, child=200",3089199.57
+smote,LightGBM,"trees=600, lr=0.03, leaves=15, child=300",4330088.73
+smote,LightGBM,"trees=300, lr=0.05, leaves=31, child=100",4686731.1899999995
+smote,LightGBM,"trees=600, lr=0.03, leaves=63, child=300",5188866.37
+smote,LightGBM,"trees=600, lr=0.03, leaves=31, child=200",12412870.380000003
+smote,LogisticRegression,C=0.03,1440103.1400000001
+smote,LogisticRegression,C=0.1,8950053.92
+smote,LogisticRegression,C=0.3,10176697.59
+smote,LogisticRegression,C=3.0,10628241.77
+smote,LogisticRegression,C=1.0,10678311.77
+smote,RandomForest,"trees=200, depth=16, leaf=20",1052627.08
+smote,RandomForest,"trees=200, depth=20, leaf=20",1216510.0
+smote,RandomForest,"trees=50, depth=8, leaf=100",1428547.08
+smote,RandomForest,"trees=300, depth=16, leaf=50",1718017.08
+smote,RandomForest,"trees=100, depth=12, leaf=50",2034340.0
+smote,RandomForest,"trees=200, depth=12, leaf=100",3298885.06
+smote,RandomForest,"trees=100, depth=16, leaf=100",3728267.79
+smote,RandomForest,"trees=200, depth=16, leaf=50",3814384.75
+undersampling,LightGBM,"trees=300, lr=0.05, leaves=31, child=100",806791.11
+undersampling,LightGBM,"trees=300, lr=0.05, leaves=15, child=200",902993.14
+undersampling,LightGBM,"trees=300, lr=0.03, leaves=31, child=200",912910.0
+undersampling,LightGBM,"trees=600, lr=0.03, leaves=31, child=200",930643.14
+undersampling,LightGBM,"trees=600, lr=0.03, leaves=63, child=300",947827.08
+undersampling,LightGBM,"trees=600, lr=0.03, leaves=15, child=300",964467.08
+undersampling,LightGBM,"trees=300, lr=0.03, leaves=63, child=300",964630.0
+undersampling,LightGBM,"trees=100, lr=0.05, leaves=15, child=200",1079890.0
+undersampling,LogisticRegression,C=0.3,1030013.14
+undersampling,LogisticRegression,C=0.1,1122625.43
+undersampling,LogisticRegression,C=1.0,1138113.1400000001
+undersampling,LogisticRegression,C=0.03,1141845.43
+undersampling,LogisticRegression,C=3.0,1269673.1400000001
+undersampling,RandomForest,"trees=200, depth=12, leaf=100",1206956.46
+undersampling,RandomForest,"trees=100, depth=12, leaf=50",1250441.33
+undersampling,RandomForest,"trees=50, depth=8, leaf=100",1258174.25
+undersampling,RandomForest,"trees=300, depth=16, leaf=50",1315751.33
+undersampling,RandomForest,"trees=200, depth=20, leaf=20",1389471.33
+undersampling,RandomForest,"trees=200, depth=16, leaf=20",1390431.33
+undersampling,RandomForest,"trees=100, depth=16, leaf=100",1394386.46
+undersampling,RandomForest,"trees=200, depth=16, leaf=50",2844321.6

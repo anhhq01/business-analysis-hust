@@ -1,21 +1,38 @@
 {
-  "model": "RandomForest",
-  "variant": "behavioural",
-  "threshold": 0.004,
+  "model": "LightGBM",
+  "data_balancing": "undersampling",
+  "feature_set": "behavioural",
+  "threshold": 0.0025,
+  "threshold_selection": "minimum net cost on validation_15; test evaluated once",
   "cost_model": {
-    "C_fn": "transaction amount",
+    "C_fn": "missed fraud transaction amount from amount_raw",
     "C_fp": 10.0,
-    "chargeback_fee": 0.0
+    "formula": "net_cost = missed_fraud_amount + C_fp * false_positives"
   },
   "metrics_at_threshold": {
-    "AUC_PR": 0.866,
-    "threshold*": 0.004,
-    "precision": 0.0128,
-    "recall": 0.9988,
-    "F1": 0.0252,
-    "net_cost": 4534131.0,
-    "n_fp": 328519.0,
-    "savings_vs_approve_all": 6698060635.0
+    "selection_source": "validation_15",
+    "feature_set": "behavioural",
+    "data_balancing": "undersampling",
+    "model": "LightGBM",
+    "threshold_source": "validation_15",
+    "threshold": 0.0025,
+    "test_rows": 552504,
+    "test_fraud_rows": 4258,
+    "test_prevalence_pct": 0.7706731534975312,
+    "test_auc_pr": 0.8600405198711027,
+    "test_precision": 0.05149621513213408,
+    "test_recall": 0.9889619539689996,
+    "test_f1": 0.09789494484546268,
+    "test_tp": 4211,
+    "test_fn": 47,
+    "test_fp": 77562,
+    "test_tn": 470684,
+    "test_review_queue": 81773,
+    "test_review_rate_pct": 14.800435833948713,
+    "test_fraud_amount_caught": 6645318601.65,
+    "test_fraud_amount_missed": 57276163.710000016,
+    "c_fp_assumption": 10.0,
+    "test_net_cost": 58051783.710000016
   },
   "features": [
     "step",
@@ -57,5 +74,5 @@
     "ip_VN"
   ],
   "label": "isFraud",
-  "note": "Deployed model excludes PaySim mechanical balance features to avoid simulator leakage. Threshold minimises net_cost on the temporal test fold; re-tune C_fp per current review economics (see cost_sensitivity)."
+  "note": "Model, balancing, hyperparameters, and threshold were locked before test."
 }
