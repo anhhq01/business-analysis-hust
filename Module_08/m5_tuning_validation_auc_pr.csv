@@ -1,0 +1,85 @@
+data_balancing,model,config_label,val_auc_pr
+class_weighted,LightGBM,"trees=100, lr=0.05, leaves=15, child=200",0.07069641218824015
+class_weighted,LightGBM,"trees=300, lr=0.03, leaves=31, child=200",0.7238119036725696
+class_weighted,LightGBM,"trees=300, lr=0.03, leaves=63, child=300",0.7455555529333433
+class_weighted,LightGBM,"trees=600, lr=0.03, leaves=31, child=200",0.7523565482105297
+class_weighted,LightGBM,"trees=600, lr=0.03, leaves=63, child=300",0.6741402909545541
+class_weighted,LightGBM,"trees=300, lr=0.05, leaves=15, child=200",0.16416630159202947
+class_weighted,LightGBM,"trees=600, lr=0.03, leaves=15, child=300",0.5482949073552493
+class_weighted,LightGBM,"trees=300, lr=0.05, leaves=31, child=100",0.30723570163957775
+class_weighted,LogisticRegression,C=3.0,0.7447499567465159
+class_weighted,LogisticRegression,C=1.0,0.7448042563696098
+class_weighted,LogisticRegression,C=0.3,0.7452866128085899
+class_weighted,LogisticRegression,C=0.1,0.7460047174545221
+class_weighted,LogisticRegression,C=0.03,0.7481941823902946
+class_weighted,RandomForest,"trees=50, depth=8, leaf=100",0.680032909105659
+class_weighted,RandomForest,"trees=200, depth=16, leaf=20",0.6839991967320577
+class_weighted,RandomForest,"trees=100, depth=12, leaf=50",0.6816016068285474
+class_weighted,RandomForest,"trees=300, depth=16, leaf=50",0.7033076775715322
+class_weighted,RandomForest,"trees=200, depth=20, leaf=20",0.6893153330415306
+class_weighted,RandomForest,"trees=200, depth=12, leaf=100",0.5625124797493516
+class_weighted,RandomForest,"trees=100, depth=16, leaf=100",0.5672826842700459
+class_weighted,RandomForest,"trees=200, depth=16, leaf=50",0.40448755721508006
+original,LightGBM,"trees=100, lr=0.05, leaves=15, child=200",0.7904511048016336
+original,LightGBM,"trees=300, lr=0.03, leaves=31, child=200",0.8000391691898052
+original,LightGBM,"trees=600, lr=0.03, leaves=63, child=300",0.7987822014563016
+original,LightGBM,"trees=300, lr=0.03, leaves=63, child=300",0.7966490490316499
+original,LightGBM,"trees=300, lr=0.05, leaves=31, child=100",0.802169588309608
+original,LightGBM,"trees=300, lr=0.05, leaves=15, child=200",0.8057025317394242
+original,LightGBM,"trees=600, lr=0.03, leaves=31, child=200",0.7981901495057906
+original,LightGBM,"trees=600, lr=0.03, leaves=15, child=300",0.7986154900663857
+original,LogisticRegression,C=0.03,0.738768150846541
+original,LogisticRegression,C=0.1,0.755936428823878
+original,LogisticRegression,C=0.3,0.757425956081528
+original,LogisticRegression,C=1.0,0.741743589131782
+original,LogisticRegression,C=3.0,0.7440560177998808
+original,RandomForest,"trees=300, depth=16, leaf=50",0.6494953996987829
+original,RandomForest,"trees=50, depth=8, leaf=100",0.6355316111471757
+original,RandomForest,"trees=100, depth=12, leaf=50",0.6491293864598613
+original,RandomForest,"trees=200, depth=16, leaf=20",0.7241331355835384
+original,RandomForest,"trees=200, depth=20, leaf=20",0.7238796986855347
+original,RandomForest,"trees=100, depth=16, leaf=100",0.5098646676432876
+original,RandomForest,"trees=200, depth=12, leaf=100",0.5099200194661426
+original,RandomForest,"trees=200, depth=16, leaf=50",0.582332919949844
+smote,LightGBM,"trees=100, lr=0.05, leaves=15, child=200",0.7486770984520857
+smote,LightGBM,"trees=300, lr=0.03, leaves=31, child=200",0.7721732297420838
+smote,LightGBM,"trees=300, lr=0.03, leaves=63, child=300",0.7720397304902563
+smote,LightGBM,"trees=300, lr=0.05, leaves=15, child=200",0.7792712453505161
+smote,LightGBM,"trees=600, lr=0.03, leaves=15, child=300",0.7793016662875095
+smote,LightGBM,"trees=300, lr=0.05, leaves=31, child=100",0.771160366246147
+smote,LightGBM,"trees=600, lr=0.03, leaves=63, child=300",0.7755774307543984
+smote,LightGBM,"trees=600, lr=0.03, leaves=31, child=200",0.7780222838016885
+smote,LogisticRegression,C=0.03,0.7275435609884876
+smote,LogisticRegression,C=0.1,0.7144768796353754
+smote,LogisticRegression,C=0.3,0.6997766418966744
+smote,LogisticRegression,C=3.0,0.670884402669823
+smote,LogisticRegression,C=1.0,0.6829512898507042
+smote,RandomForest,"trees=200, depth=16, leaf=20",0.7162505907240331
+smote,RandomForest,"trees=200, depth=20, leaf=20",0.716006306091447
+smote,RandomForest,"trees=50, depth=8, leaf=100",0.6647568901838834
+smote,RandomForest,"trees=300, depth=16, leaf=50",0.694716121351808
+smote,RandomForest,"trees=100, depth=12, leaf=50",0.6756973646101102
+smote,RandomForest,"trees=200, depth=12, leaf=100",0.5930319217454425
+smote,RandomForest,"trees=100, depth=16, leaf=100",0.5908435480586849
+smote,RandomForest,"trees=200, depth=16, leaf=50",0.6207590651605565
+undersampling,LightGBM,"trees=300, lr=0.05, leaves=31, child=100",0.7514801600216515
+undersampling,LightGBM,"trees=300, lr=0.05, leaves=15, child=200",0.7685398610498754
+undersampling,LightGBM,"trees=300, lr=0.03, leaves=31, child=200",0.7582214169444486
+undersampling,LightGBM,"trees=600, lr=0.03, leaves=31, child=200",0.7662263777993723
+undersampling,LightGBM,"trees=600, lr=0.03, leaves=63, child=300",0.759657497260932
+undersampling,LightGBM,"trees=600, lr=0.03, leaves=15, child=300",0.7740493289675923
+undersampling,LightGBM,"trees=300, lr=0.03, leaves=63, child=300",0.7540493698078963
+undersampling,LightGBM,"trees=100, lr=0.05, leaves=15, child=200",0.7183365642672987
+undersampling,LogisticRegression,C=0.3,0.7504960608271747
+undersampling,LogisticRegression,C=0.1,0.7420110633466288
+undersampling,LogisticRegression,C=1.0,0.7525811957073043
+undersampling,LogisticRegression,C=0.03,0.7152470370805596
+undersampling,LogisticRegression,C=3.0,0.7521486546189466
+undersampling,RandomForest,"trees=200, depth=12, leaf=100",0.3893129427950188
+undersampling,RandomForest,"trees=100, depth=12, leaf=50",0.559856288370829
+undersampling,RandomForest,"trees=50, depth=8, leaf=100",0.5442418594323415
+undersampling,RandomForest,"trees=300, depth=16, leaf=50",0.5774401277634469
+undersampling,RandomForest,"trees=200, depth=20, leaf=20",0.6397163557736855
+undersampling,RandomForest,"trees=200, depth=16, leaf=20",0.6403323626299722
+undersampling,RandomForest,"trees=100, depth=16, leaf=100",0.38309787428247316
+undersampling,RandomForest,"trees=200, depth=16, leaf=50",0.48709020522287005

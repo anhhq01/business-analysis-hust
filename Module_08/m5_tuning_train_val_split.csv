@@ -1,0 +1,4 @@
+split,rows,fraud_rows,fraud_rate_%
+inner_train_85_raw,1889936,3471,0.1836570127242404
+inner_train_85_sample_used_for_tuning,250000,459,0.18359999999999999
+validation_15_untouched,327969,484,0.14757492323969643
